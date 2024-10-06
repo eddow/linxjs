@@ -1,5 +1,5 @@
 import { InlineValue, Parsed } from './parser'
-import { OrderbyTransformation, WhereTransformation } from './transformations'
+import { LetTransformation, OrderbyTransformation, WhereTransformation } from './transformations'
 
 export class JSSyntaxError extends Error {
 	constructor(code: string, parent: Error) {
@@ -43,6 +43,10 @@ const transform = {
 			}
 			return 0
 		})
+	},
+	LetTransformation(partial, transformation) {
+		const fct = makeFunction(transformation.value)
+		return partial.map((v) => [...v, fct(v)])
 	}
 }
 

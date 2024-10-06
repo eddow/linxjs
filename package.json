@@ -1,7 +1,7 @@
 {
-	"name": "jsslinq",
+	"name": "linxjs",
 	"version": "1.0.0",
-	"description": "String linq inlines for JS",
+	"description": "Linq Query Syntax for JS",
 	"main": "index.js",
 	"scripts": {
 		"test": "jest",

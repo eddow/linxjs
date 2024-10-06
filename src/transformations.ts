@@ -19,10 +19,15 @@ export class OrderbyTransformation extends Transformation {
 	}
 }
 
+export class LetTransformation extends Transformation {
+	constructor(public value: InlineValue) {
+		super()
+	}
+}
+
 /* TODO:
 	group
 	join
-	let
 Distinct
 Aggregation methods (e.g., Any, All, Count, Sum, Average, Min, Max)
 Take / Skip for pagination

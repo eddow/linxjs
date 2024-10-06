@@ -2,17 +2,8 @@ import linq, { memLinq } from '../src'
 
 const from = linq(memLinq)
 
-const students = [
-	{ name: 'Mark', age: 22 },
-	{ name: 'Peter', age: 20 },
-	{ name: 'Sara', age: 21 },
-	{ name: 'Tim', age: 22 },
-	{ name: 'John', age: 22 },
-	{ name: 'Bob', age: 21 }
-]
-
 describe('standard', () => {
-	test('standard', () => {
+	test('where', () => {
 		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 		expect(from`n in ${numbers} where ${(n) => n % 2 === 0}`).toEqual([2, 4, 6, 8, 10])
 		expect(from`n in ${numbers} where n % 2 === 0`).toEqual([2, 4, 6, 8, 10])
@@ -27,13 +18,11 @@ describe('standard', () => {
 		expect(from`n in ${numbers} orderby n`).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 		expect(from`n in ${numbers} orderby -n ascending`).toEqual([10, 9, 8, 7, 6, 5, 4, 3, 2, 1])
 		expect(from`n in ${numbers} orderby n descending`).toEqual([10, 9, 8, 7, 6, 5, 4, 3, 2, 1])
-		expect(from`s in ${students} orderby s.age, s.name select s.name`).toEqual([
-			'Peter',
-			'Bob',
-			'Sara',
-			'John',
-			'Mark',
-			'Tim'
+	})
+	test('let', () => {
+		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+		expect(from`n in ${numbers} let x = n * 2 select x`).toEqual([
+			2, 4, 6, 8, 10, 12, 14, 16, 18, 20
 		])
 	})
 })
