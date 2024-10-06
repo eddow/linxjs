@@ -47,6 +47,7 @@ function trim(reader: TemplateStringsReader) {
 }
 
 function peekKeyword(reader: TemplateStringsReader) {
+	// variable "ascending"/"descending" ?
 	trim(reader)
 	let pp = reader.parts[reader.part]?.substring(reader.posInPart).trimStart()
 	const bone = pp && /^(\w+)\s*/.exec(pp)
@@ -87,8 +88,9 @@ const linqKeywords = [
 ]
 const keywordPattern = linqKeywords.join('|') // Join keywords with '|'
 const jsFirst = new RegExp(`\\s*(.*?)(?=\\s+(${keywordPattern}))`, 'i')
+const noComma = new RegExp(`\\s*([^,]*)`, 'i')
 
-function nextValue(reader: TemplateStringsReader, from?: string[]) {
+function nextValue(reader: TemplateStringsReader, from?: string[], simple?: boolean) {
 	trim(reader)
 	let next = reader.parts[reader.part].substring(reader.posInPart)
 	if (!next.trim()) {
@@ -107,6 +109,9 @@ function nextValue(reader: TemplateStringsReader, from?: string[]) {
 		nextRead
 	do {
 		nextRead = jsFirst.exec(next)
+		const commaLess = noComma.exec(next)
+		if (simple && commaLess && (!nextRead || nextRead[0].length > commaLess[0].length))
+			nextRead = commaLess
 		if (!nextRead) {
 			parsable.strings.push(next.trimStart())
 			if (reader.part < reader.args.length) parsable.args.push(reader.args[reader.part])
@@ -147,10 +152,11 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
 				const specs = { ascending: true, descending: false }
 				const orders: OrderSpec[] = []
 				do {
-					const order = nextValue(reader, keys),
-						ascSpec = peekKeyword(reader)
-					if (ascSpec) nextKeyword(reader)
-					orders.push({ value: order, asc: ascSpec && ascSpec in specs ? specs[ascSpec] : true })
+					const order = nextValue(reader, keys, true),
+						ascSpec = peekKeyword(reader),
+						ascIsSpec = ascSpec && ascSpec in specs
+					if (ascIsSpec) nextKeyword(reader)
+					orders.push({ value: order, asc: ascIsSpec ? specs[ascSpec] : true })
 				} while (isRaw(reader, ','))
 				transformations.push(new OrderbyTransformation(orders))
 				break

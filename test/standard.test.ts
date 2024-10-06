@@ -2,6 +2,15 @@ import linq, { memLinq } from '../src'
 
 const from = linq(memLinq)
 
+const students = [
+	{ name: 'Mark', age: 22 },
+	{ name: 'Peter', age: 20 },
+	{ name: 'Sara', age: 21 },
+	{ name: 'Tim', age: 22 },
+	{ name: 'John', age: 22 },
+	{ name: 'Bob', age: 21 }
+]
+
 describe('standard', () => {
 	test('standard', () => {
 		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -16,7 +25,15 @@ describe('standard', () => {
 	test('orderby', () => {
 		const numbers = [1, 10, 2, 9, 3, 8, 4, 7, 5, 6]
 		expect(from`n in ${numbers} orderby n`).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-		expect(from`n in ${numbers} orderby n ascending`).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+		expect(from`n in ${numbers} orderby -n ascending`).toEqual([10, 9, 8, 7, 6, 5, 4, 3, 2, 1])
 		expect(from`n in ${numbers} orderby n descending`).toEqual([10, 9, 8, 7, 6, 5, 4, 3, 2, 1])
+		expect(from`s in ${students} orderby s.age, s.name select s.name`).toEqual([
+			'Peter',
+			'Bob',
+			'Sara',
+			'John',
+			'Mark',
+			'Tim'
+		])
 	})
 })
