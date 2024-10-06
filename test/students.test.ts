@@ -36,7 +36,7 @@ const registration = [
 
 describe('students', () => {
 	test('orderby', () => {
-		expect([...l`s in ${students} orderby s.age, s.name select s.name`]).toEqual([
+		expect([...l`from s in ${students} orderby s.age, s.name select s.name`]).toEqual([
 			'Peter',
 			'Bob',
 			'Sara',
@@ -46,38 +46,40 @@ describe('students', () => {
 		])
 	})
 	test('let', () => {
-		expect([...l`s in ${students} let year = 1979-s.age select {name: s.name, year}`]).toEqual([
-			{
-				name: 'Mark',
-				year: 1957
-			},
-			{
-				name: 'Peter',
-				year: 1959
-			},
-			{
-				name: 'Sara',
-				year: 1958
-			},
-			{
-				name: 'Tim',
-				year: 1957
-			},
-			{
-				name: 'John',
-				year: 1957
-			},
-			{
-				name: 'Bob',
-				year: 1958
-			}
-		])
+		expect([...l`from s in ${students} let year = 1979-s.age select {name: s.name, year}`]).toEqual(
+			[
+				{
+					name: 'Mark',
+					year: 1957
+				},
+				{
+					name: 'Peter',
+					year: 1959
+				},
+				{
+					name: 'Sara',
+					year: 1958
+				},
+				{
+					name: 'Tim',
+					year: 1957
+				},
+				{
+					name: 'John',
+					year: 1957
+				},
+				{
+					name: 'Bob',
+					year: 1958
+				}
+			]
+		)
 	})
 
 	test('join', () => {
 		// TODO order by left key
 		expect([
-			...l`s in ${students}
+			...l`from s in ${students}
 				join r in ${registration} on s.name equals r.name
 				join c in ${courses} on r.course equals c.name
 				select { name: s.name, course: c.name, hours: c.hours }`
@@ -98,7 +100,7 @@ describe('students', () => {
 
 	test('join into', () => {
 		expect([
-			...l`s in ${students} join r in ${registration} on s.name equals r.name into
+			...l`from s in ${students} join r in ${registration} on s.name equals r.name into
 				courses select ${(s, courses) => ({ name: s.name, courses: courses.map((c) => c.course) })}`
 		]).toEqual([
 			{ name: 'Bob', courses: ['Geography'] },

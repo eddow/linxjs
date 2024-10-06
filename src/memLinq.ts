@@ -1,5 +1,6 @@
 import { InlineValue, Parsed } from './parser'
 import {
+	FromTransformation,
 	JoinTransformation,
 	LetTransformation,
 	OrderbyTransformation,
@@ -39,6 +40,15 @@ function keySort(a: { key: any }, b: { key: any }) {
 }
 
 const transform = {
+	*FromTransformation(
+		enumerable: Generator<any>,
+		variables: string[],
+		{ source }: FromTransformation
+	) {
+		const genSource = <Generator<any>>source // TODO case when a name is given -> InlineValue
+		if (!variables.length) for (const v of genSource) yield [v]
+		else for (const itm of enumerable) for (const v of genSource) yield [...itm, v]
+	},
 	*WhereTransformation(
 		enumerable: Generator<any>,
 		variables: string[],
@@ -81,8 +91,6 @@ const transform = {
 		{ from, source, valueA, valueB, into }: JoinTransformation
 	) {
 		const genSource = <Generator<any>>source // TODO case when a name is given -> InlineValue
-		// When possible, try to make it faster by sorting both entries (`partial array` and `source`)
-		// and browsing with 2 indexes => O(n1+n2)
 		let fctPartial: Function | undefined, fctSource: Function | undefined
 		try {
 			fctPartial = makeFunction(valueA, variables)
@@ -138,9 +146,9 @@ const transform = {
 	}
 }
 
-export default function* memLinq({ from, source, transformations, select }: Parsed): any {
-	let enumerable = source.map((v) => [v])
-	let variables = [from]
+export default function* memLinq({ transformations, select }: Parsed): any {
+	let enumerable = (function* (): Generator<any> {})(),
+		variables: string[] = []
 	for (const transformation of transformations) {
 		enumerable = transform[transformation.constructor.name](enumerable, variables, transformation)
 		variables = [...variables, ...transformation.variables]
@@ -149,5 +157,5 @@ export default function* memLinq({ from, source, transformations, select }: Pars
 	if (select) {
 		const selectFct = makeFunction(select, variables)
 		for (const v of enumerable) yield selectFct(v)
-	} else for (const v of enumerable) yield v[0]
+	} else for (const v of enumerable) yield v[0] // TODO reduce: all props
 }

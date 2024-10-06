@@ -6,6 +6,18 @@ export class Transformation {
 	}
 }
 
+export class FromTransformation<T = any> extends Transformation {
+	constructor(
+		public from: string,
+		public source: Hardcodable<Generator<T>>
+	) {
+		super()
+	}
+	get variables() {
+		return [this.from]
+	}
+}
+
 export class WhereTransformation extends Transformation {
 	constructor(public predicate: InlineValue) {
 		super()

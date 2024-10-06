@@ -1,4 +1,5 @@
 import {
+	FromTransformation,
 	JoinTransformation,
 	LetTransformation,
 	OrderbyTransformation,
@@ -15,8 +16,6 @@ export interface InlineValue<T = any> {
 export type Hardcodable<T = any> = T | InlineValue<T>
 
 export interface Parsed {
-	from: string
-	source: any
 	transformations: Transformation[]
 	select?: InlineValue
 }
@@ -32,6 +31,7 @@ export class SyntaxError extends Error {
 }
 
 const linqKeywords = [
+	'from',
 	'where',
 	'select',
 	'join',
@@ -201,20 +201,21 @@ export class TemplateStringsReader {
 
 export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
 	const reader = new TemplateStringsReader(parts, args)
-	const from = reader.nextWord()
-	reader.expect('in')
-	const source = reader.nextValue()
 	const transformations: Transformation[] = []
 	while (!reader.ended()) {
 		switch (reader.nextWord()) {
+			case 'from':
+				transformations.push(
+					new FromTransformation(reader.nextWord(), reader.expect('in') && reader.nextValue())
+				)
+				break
 			case 'where':
-				const where = reader.nextValue()
-				transformations.push(new WhereTransformation(where))
+				transformations.push(new WhereTransformation(reader.nextValue()))
 				break
 			case 'select':
 				const select = reader.nextValue()
 				if (!reader.ended()) throw new SyntaxError(reader, 'Expecting `select` to finish the query')
-				return { from, transformations, source, select }
+				return { transformations, select }
 			case 'orderby':
 				const specs = { ascending: true, descending: false }
 				const orders: OrderSpec[] = []
@@ -249,5 +250,5 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
 				throw new SyntaxError(reader, 'Expecting `select`, `join` or `where`')
 		}
 	}
-	return { from, transformations, source }
+	return { transformations }
 }
