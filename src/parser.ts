@@ -1,4 +1,5 @@
 import {
+	JoinTransformation,
 	LetTransformation,
 	OrderbyTransformation,
 	type OrderSpec,
@@ -7,12 +8,12 @@ import {
 } from './transformations'
 
 export interface InlineValue {
-	from: string[]
 	strings: string[]
 	args: any[]
 }
 
 export interface Parsed {
+	from: string
 	source: any
 	transformations: Transformation[]
 	select?: InlineValue
@@ -38,6 +39,7 @@ const linqKeywords = [
 	'ascending',
 	'descending',
 	'equals',
+	'on',
 	'in',
 	'let'
 ]
@@ -45,7 +47,7 @@ const keywordPattern = linqKeywords.join('|') // Join keywords with '|'
 const jsFirst = new RegExp(`\\s*(.*?)(?=\\s+(${keywordPattern}))`, 'i')
 const noComma = new RegExp(`\\s*([^,]*)`, 'i')
 
-class TemplateStringsReader {
+export class TemplateStringsReader {
 	constructor(
 		public parts: TemplateStringsArray,
 		public args: any[],
@@ -136,7 +138,7 @@ class TemplateStringsReader {
 	 * @param simple If true, the value is parsed without commas. Defaults to false.
 	 * @returns The parsed InlineValue.
 	 */
-	nextValue(from?: string[], simple?: boolean): InlineValue {
+	nextValue(simple?: 'simple'): InlineValue {
 		this.trim()
 		let next = this.parts[this.part].substring(this.posInPart)
 		if (!next.trim()) {
@@ -144,9 +146,7 @@ class TemplateStringsReader {
 			this.posInPart = 0
 			return this.args[this.part++]
 		}
-		if (!from) throw new SyntaxError(this, 'Value cannot be inline')
 		let parsable: InlineValue = {
-				from: [...from],
 				strings: [],
 				args: []
 			},
@@ -169,44 +169,78 @@ class TemplateStringsReader {
 		} while (!this.ended() && !nextRead)
 		return parsable
 	}
+
+	isWord(...words: string[]) {
+		const word = this.peekWord()
+		if (!word || !words.includes(word)) return false
+		return this.nextWord()
+	}
+
+	/**
+	 * Consumes the next word and throws a SyntaxError if it is not the given word.
+	 * @param word The word to expect.
+	 * @throws {SyntaxError} If the next word is not the given word.
+	 */
+	expect(...words: string[]) {
+		if (!this.isWord(...words)) throw new SyntaxError(this, `Expecting ${words.join(' or ')}`)
+	}
+
+	/**
+	 * Consumes the next given characters and throws a SyntaxError if they are not found.
+	 * @param raw The raw string to expect.
+	 * @throws {SyntaxError} If the next word is not the given raw string.
+	 */
+	expectRaw(raw: string) {
+		if (!this.isRaw(raw)) throw new SyntaxError(this, `Expecting ${raw}`)
+	}
 }
 
 export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
 	const reader = new TemplateStringsReader(parts, args)
-	const from = [reader.nextWord()]
-	if (reader.nextWord() !== 'in') throw new SyntaxError(reader, 'Expecting `in`')
+	const from = reader.nextWord()
+	reader.expect('in')
 	const source = reader.nextValue()
 	const transformations: Transformation[] = []
 	while (!reader.ended()) {
 		switch (reader.nextWord()) {
 			case 'where':
-				const where = reader.nextValue(from)
+				const where = reader.nextValue()
 				transformations.push(new WhereTransformation(where))
 				break
 			case 'select':
-				const select = reader.nextValue(from)
+				const select = reader.nextValue()
 				if (!reader.ended()) throw new SyntaxError(reader, 'Expecting `select` to finish the query')
-				return { transformations, source, select }
+				return { from, transformations, source, select }
 			case 'orderby':
 				const specs = { ascending: true, descending: false }
 				const orders: OrderSpec[] = []
 				do {
-					const order = reader.nextValue(from, true),
-						ascSpec = reader.peekWord(),
+					const order = reader.nextValue('simple'),
+						ascSpec = reader.isWord('ascending', 'descending'),
 						ascIsSpec = ascSpec && ascSpec in specs
-					if (ascIsSpec) reader.nextWord()
 					orders.push({ value: order, asc: ascIsSpec ? specs[ascSpec] : true })
 				} while (reader.isRaw(','))
 				transformations.push(new OrderbyTransformation(orders))
 				break
 			case 'let':
-				from.push(reader.nextWord())
-				if (!reader.isRaw('=')) throw new SyntaxError(reader, 'Expecting `=`')
-				transformations.push(new LetTransformation(reader.nextValue(from)))
+				const variable = reader.nextWord()
+				reader.expectRaw('=')
+				const value = reader.nextValue()
+				transformations.push(new LetTransformation(variable, value))
 				break
 			case 'join':
 				const join = reader.nextWord()
-				//TODO
+				reader.expect('in')
+				const joinSource = reader.nextValue()
+				reader.expect('on')
+				transformations.push(
+					new JoinTransformation(
+						join,
+						joinSource,
+						reader.nextValue(),
+						reader.isWord('equals') ? reader.nextValue() : undefined
+					)
+				)
 				break
 			case 'group':
 				throw 'todo'
@@ -214,5 +248,5 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
 				throw new SyntaxError(reader, 'Expecting `select`, `join` or `where`')
 		}
 	}
-	return { transformations, source }
+	return { from, transformations, source }
 }

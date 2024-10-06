@@ -10,6 +10,29 @@ const students = [
 	{ name: 'John', age: 22 },
 	{ name: 'Bob', age: 21 }
 ]
+const courses = [
+	{ name: 'Math', hours: 60 },
+	{ name: 'English', hours: 40 },
+	{ name: 'Chemistry', hours: 20 },
+	{ name: 'Physics', hours: 35 },
+	{ name: 'History', hours: 10 },
+	{ name: 'Geography', hours: 15 }
+]
+
+const registration = [
+	{ name: 'Mark', course: 'Math' },
+	{ name: 'Peter', course: 'English' },
+	{ name: 'Sara', course: 'Chemistry' },
+	{ name: 'Tim', course: 'Physics' },
+	{ name: 'John', course: 'History' },
+	{ name: 'Bob', course: 'Geography' },
+	{ name: 'Mark', course: 'English' },
+	{ name: 'Peter', course: 'Chemistry' },
+	{ name: 'Sara', course: 'Physics' },
+	{ name: 'Tim', course: 'History' },
+	{ name: 'John', course: 'Geography' },
+	{ name: 'Alf', course: 'Math' }
+]
 
 describe('students', () => {
 	test('orderby', () => {
@@ -48,6 +71,27 @@ describe('students', () => {
 				name: 'Bob',
 				year: 1958
 			}
+		])
+	})
+
+	test('join', () => {
+		expect(
+			from`s in ${students}
+				join r in ${registration} on s.name equals r.name
+				join c in ${courses} on r.course equals c.name
+				select { name: s.name, course: c.name, hours: c.hours }`
+		).toEqual([
+			{ name: 'Peter', course: 'Chemistry', hours: 20 },
+			{ name: 'Sara', course: 'Chemistry', hours: 20 },
+			{ name: 'Mark', course: 'English', hours: 40 },
+			{ name: 'Peter', course: 'English', hours: 40 },
+			{ name: 'Bob', course: 'Geography', hours: 15 },
+			{ name: 'John', course: 'Geography', hours: 15 },
+			{ name: 'John', course: 'History', hours: 10 },
+			{ name: 'Tim', course: 'History', hours: 10 },
+			{ name: 'Mark', course: 'Math', hours: 60 },
+			{ name: 'Sara', course: 'Physics', hours: 35 },
+			{ name: 'Tim', course: 'Physics', hours: 35 }
 		])
 	})
 })

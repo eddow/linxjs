@@ -25,4 +25,14 @@ describe('standard', () => {
 			2, 4, 6, 8, 10, 12, 14, 16, 18, 20
 		])
 	})
+	test('join', () => {
+		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+		expect(from`n in ${numbers} join m in ${numbers} on ${(n, m) => n === m} select n + m`).toEqual(
+			[2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+		)
+		// This one use table sorting optimization
+		expect(from`n in ${numbers} join m in ${numbers} on n equals m select n + m`).toEqual([
+			2, 4, 6, 8, 10, 12, 14, 16, 18, 20
+		])
+	})
 })

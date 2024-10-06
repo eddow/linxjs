@@ -20,15 +20,31 @@ export class OrderbyTransformation extends Transformation {
 }
 
 export class LetTransformation extends Transformation {
-	constructor(public value: InlineValue) {
+	constructor(
+		public variable: string,
+		public value: InlineValue
+	) {
+		super()
+	}
+}
+
+export class JoinTransformation extends Transformation {
+	constructor(
+		public from: string,
+		public source: any,
+		public valueA: InlineValue,
+		public valueB?: InlineValue
+	) {
 		super()
 	}
 }
 
 /* TODO:
 	group
-	join
+	join ... into ...
 Distinct
 Aggregation methods (e.g., Any, All, Count, Sum, Average, Min, Max)
 Take / Skip for pagination
 */
+
+// TODO: Templates -> virer les `any`
