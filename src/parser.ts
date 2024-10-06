@@ -7,10 +7,12 @@ import {
 	WhereTransformation
 } from './transformations'
 
-export interface InlineValue {
+export interface InlineValue<T = any> {
 	strings: string[]
 	args: any[]
 }
+
+export type Hardcodable<T = any> = T | InlineValue<T>
 
 export interface Parsed {
 	from: string
@@ -181,8 +183,9 @@ export class TemplateStringsReader {
 	 * @param word The word to expect.
 	 * @throws {SyntaxError} If the next word is not the given word.
 	 */
-	expect(...words: string[]) {
+	expect(...words: string[]): true {
 		if (!this.isWord(...words)) throw new SyntaxError(this, `Expecting ${words.join(' or ')}`)
+		return true
 	}
 
 	/**
@@ -190,8 +193,9 @@ export class TemplateStringsReader {
 	 * @param raw The raw string to expect.
 	 * @throws {SyntaxError} If the next word is not the given raw string.
 	 */
-	expectRaw(raw: string) {
+	expectRaw(raw: string): true {
 		if (!this.isRaw(raw)) throw new SyntaxError(this, `Expecting ${raw}`)
+		return true
 	}
 }
 
@@ -229,16 +233,13 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
 				transformations.push(new LetTransformation(variable, value))
 				break
 			case 'join':
-				const join = reader.nextWord()
-				reader.expect('in')
-				const joinSource = reader.nextValue()
-				reader.expect('on')
 				transformations.push(
 					new JoinTransformation(
-						join,
-						joinSource,
-						reader.nextValue(),
-						reader.isWord('equals') ? reader.nextValue() : undefined
+						reader.nextWord(),
+						reader.expect('in') && reader.nextValue(),
+						reader.expect('on') && reader.nextValue(),
+						reader.expect('equals') && reader.nextValue(),
+						reader.isWord('into') ? reader.nextWord() : undefined
 					)
 				)
 				break

@@ -1,6 +1,6 @@
 import linq, { memLinq } from '../src'
 
-const from = linq(memLinq)
+const l = linq(memLinq)
 
 const students = [
 	{ name: 'Mark', age: 22 },
@@ -36,7 +36,7 @@ const registration = [
 
 describe('students', () => {
 	test('orderby', () => {
-		expect(from`s in ${students} orderby s.age, s.name select s.name`).toEqual([
+		expect([...l`s in ${students} orderby s.age, s.name select s.name`]).toEqual([
 			'Peter',
 			'Bob',
 			'Sara',
@@ -46,7 +46,7 @@ describe('students', () => {
 		])
 	})
 	test('let', () => {
-		expect(from`s in ${students} let year = 1979-s.age select {name: s.name, year}`).toEqual([
+		expect([...l`s in ${students} let year = 1979-s.age select {name: s.name, year}`]).toEqual([
 			{
 				name: 'Mark',
 				year: 1957
@@ -75,12 +75,13 @@ describe('students', () => {
 	})
 
 	test('join', () => {
-		expect(
-			from`s in ${students}
+		// TODO order by left key
+		expect([
+			...l`s in ${students}
 				join r in ${registration} on s.name equals r.name
 				join c in ${courses} on r.course equals c.name
 				select { name: s.name, course: c.name, hours: c.hours }`
-		).toEqual([
+		]).toEqual([
 			{ name: 'Peter', course: 'Chemistry', hours: 20 },
 			{ name: 'Sara', course: 'Chemistry', hours: 20 },
 			{ name: 'Mark', course: 'English', hours: 40 },
@@ -92,6 +93,20 @@ describe('students', () => {
 			{ name: 'Mark', course: 'Math', hours: 60 },
 			{ name: 'Sara', course: 'Physics', hours: 35 },
 			{ name: 'Tim', course: 'Physics', hours: 35 }
+		])
+	})
+
+	test('join into', () => {
+		expect([
+			...l`s in ${students} join r in ${registration} on s.name equals r.name into
+				courses select ${(s, courses) => ({ name: s.name, courses: courses.map((c) => c.course) })}`
+		]).toEqual([
+			{ name: 'Bob', courses: ['Geography'] },
+			{ name: 'John', courses: ['History', 'Geography'] },
+			{ name: 'Mark', courses: ['Math', 'English'] },
+			{ name: 'Peter', courses: ['English', 'Chemistry'] },
+			{ name: 'Sara', courses: ['Chemistry', 'Physics'] },
+			{ name: 'Tim', courses: ['Physics', 'History'] }
 		])
 	})
 })

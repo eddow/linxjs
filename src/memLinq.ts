@@ -13,7 +13,7 @@ export class JSSyntaxError extends Error {
 }
 
 interface Partial<T = any> {
-	array: T[]
+	enumerable: Generator<T>
 	variables: string[]
 }
 
@@ -39,100 +39,115 @@ function keySort(a: { key: any }, b: { key: any }) {
 }
 
 const transform = {
-	WhereTransformation({ array, variables }: Partial, { predicate }: WhereTransformation) {
-		return { array: array.filter(makeFunction(predicate, variables)), variables }
+	*WhereTransformation(
+		enumerable: Generator<any>,
+		variables: string[],
+		{ predicate }: WhereTransformation
+	) {
+		const predicateFct = makeFunction(predicate, variables)
+		for (const itm of enumerable) if (predicateFct(itm)) yield itm
 	},
-	OrderbyTransformation({ array, variables }: Partial, { orders }: OrderbyTransformation) {
+	*OrderbyTransformation(
+		enumerable: Generator<any>,
+		variables: string[],
+		{ orders }: OrderbyTransformation
+	) {
 		const fctOrders = orders.map(({ value, asc }) => ({
 			fct: makeFunction(value, variables),
 			asc
 		}))
-		return {
-			array: array.sort((a, b) => {
-				for (const { fct, asc } of fctOrders) {
-					const aVal = fct(a),
-						bVal = fct(b)
+		yield* [...enumerable].sort((a, b) => {
+			for (const { fct, asc } of fctOrders) {
+				const aVal = fct(a),
+					bVal = fct(b)
 
-					if (aVal === bVal) continue
-					return aVal < bVal === asc ? -1 : 1
-				}
-				return 0
-			}),
-			variables
-		}
-	},
-	LetTransformation({ array, variables }: Partial, { variable, value }: LetTransformation) {
-		const allVars = [...variables, variable]
-		const fct = makeFunction(value, variables)
-		return { array: array.map((v) => [...v, fct(v)]), variables: allVars }
-	},
-	JoinTransformation(
-		{ array, variables }: Partial,
-		{ from, source, valueA, valueB }: JoinTransformation
-	) {
-		const rv: any[] = []
-		if (valueB) {
-			let fctPartial: Function | undefined, fctSource: Function | undefined
-			try {
-				fctPartial = makeFunction(valueA, variables)
-				fctSource = makeFunction(valueB, [from])
-			} catch (e) {
-				try {
-					fctPartial = makeFunction(valueB, [from])
-					fctSource = makeFunction(valueA, variables)
-				} catch (e) {}
+				if (aVal === bVal) continue
+				return aVal < bVal === asc ? -1 : 1
 			}
-			if (fctPartial && fctSource) {
-				const tableP = array.map((p) => ({ key: fctPartial(p), value: p })).sort(keySort),
-					tableS = source.map((s) => ({ key: fctSource([s]), value: s })).sort(keySort)
+			return 0
+		})
+	},
+	*LetTransformation(
+		enumerable: Generator<any>,
+		variables: string[],
+		{ variable, value }: LetTransformation
+	) {
+		const fct = makeFunction(value, variables)
+		for (const v of enumerable) yield [...v, fct(v)]
+	},
+	*JoinTransformation(
+		enumerable: Generator<any>,
+		variables: string[],
+		{ from, source, valueA, valueB, into }: JoinTransformation
+	) {
+		const genSource = <Generator<any>>source // TODO case when a name is given -> InlineValue
+		// When possible, try to make it faster by sorting both entries (`partial array` and `source`)
+		// and browsing with 2 indexes => O(n1+n2)
+		let fctPartial: Function | undefined, fctSource: Function | undefined
+		try {
+			fctPartial = makeFunction(valueA, variables)
+			fctSource = makeFunction(valueB, [from])
+		} catch (e) {
+			try {
+				fctPartial = makeFunction(valueB, [from])
+				fctSource = makeFunction(valueA, variables)
+			} catch (e) {}
+		}
+		if (fctPartial && fctSource) {
+			const tableP = [...enumerable].map((p) => ({ key: fctPartial(p), value: p })).sort(keySort),
+				tableS = [...genSource].map((s) => ({ key: fctSource([s]), value: s })).sort(keySort)
 
-				let pi = 0,
-					si = 0
-				while (pi < tableP.length && si < tableS.length) {
-					if (tableP[pi].key < tableS[si].key) pi++
-					else if (tableP[pi].key > tableS[si].key) si++
-					else {
-						const key = tableP[pi].key,
-							factorP: any[] = []
-						for (; pi < tableP.length && tableP[pi].key === key; pi++)
-							factorP.push(tableP[pi].value)
-						for (; si < tableS.length && tableS[si].key === key; si++)
-							rv.push(...factorP.map((p) => [...p, tableS[si].value]))
+			let pi = 0,
+				si = 0
+			while (pi < tableP.length && si < tableS.length) {
+				if (tableP[pi].key < tableS[si].key) pi++
+				else if (tableP[pi].key > tableS[si].key) si++
+				else {
+					const key = tableP[pi].key,
+						factorP: any[] = [],
+						factorS: any[] = []
+					for (; pi < tableP.length && tableP[pi].key === key; pi++) factorP.push(tableP[pi].value)
+					for (; si < tableS.length && tableS[si].key === key; si++) factorS.push(tableS[si].value)
+					if (into) for (const p of factorP) yield [...p, factorS]
+					else for (const p of factorP) for (const s of factorS) yield [...p, s]
+				}
+			}
+		} else {
+			// Note: shouldn't come here as `equals` is compulsory but it was written so we can let it "in the case of"
+			const allVars = [...variables, from],
+				fctA = makeFunction(valueA, allVars),
+				fctB = valueB ? makeFunction(valueB, allVars) : null,
+				fct = fctB ? (v: any[]) => fctA(v) === fctB(v) : fctA
+			if (into)
+				for (const elmA of enumerable) {
+					const paired: any[] = []
+					for (const elmB of genSource) {
+						const joined = [...elmA, elmB]
+						if (fct(joined)) paired.push(elmB)
+					}
+					yield [...elmA, paired]
+				}
+			else
+				for (const elmA of enumerable) {
+					for (const elmB of genSource) {
+						const joined = [...elmA, elmB]
+						if (fct(joined)) yield joined
 					}
 				}
-			}
-			return { array: rv, variables: [...variables, from] }
-		}
-		const allVars = [...variables, ...from],
-			fctA = makeFunction(valueA, allVars),
-			fctB = valueB ? makeFunction(valueB, allVars) : null,
-			fct = fctB ? (v: any[]) => fctA(v) === fctB(v) : fctA
-		for (const elmA of array) {
-			for (const elmB of source) {
-				const joined = [...elmA, elmB]
-				if (fct(joined)) {
-					rv.push(joined)
-				}
-			}
-		}
-		return {
-			array: rv,
-			variables: allVars
 		}
 	}
 }
 
-export default function memLinq({ from, source, transformations, select }: Parsed): any {
-	let partial: Partial = {
-		array: source.map((v) => [v]),
-		variables: [from]
+export default function* memLinq({ from, source, transformations, select }: Parsed): any {
+	let enumerable = source.map((v) => [v])
+	let variables = [from]
+	for (const transformation of transformations) {
+		enumerable = transform[transformation.constructor.name](enumerable, variables, transformation)
+		variables = [...variables, ...transformation.variables]
 	}
-	for (const transformation of transformations)
-		partial = transform[transformation.constructor.name](partial, transformation)
 
 	if (select) {
-		return partial.array.map(makeFunction(select, partial.variables))
-	} else {
-		return partial.array.map((v) => v[0])
-	}
+		const selectFct = makeFunction(select, variables)
+		for (const v of enumerable) yield selectFct(v)
+	} else for (const v of enumerable) yield v[0]
 }

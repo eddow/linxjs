@@ -1,6 +1,10 @@
-import type { InlineValue } from './parser'
+import type { Hardcodable, InlineValue } from './parser'
 
-export class Transformation {}
+export class Transformation {
+	get variables() {
+		return <string[]>[]
+	}
+}
 
 export class WhereTransformation extends Transformation {
 	constructor(public predicate: InlineValue) {
@@ -26,16 +30,23 @@ export class LetTransformation extends Transformation {
 	) {
 		super()
 	}
+	get variables() {
+		return [this.variable]
+	}
 }
 
-export class JoinTransformation extends Transformation {
+export class JoinTransformation<T = any> extends Transformation {
 	constructor(
 		public from: string,
-		public source: any,
+		public source: Hardcodable<Generator<T>>,
 		public valueA: InlineValue,
-		public valueB?: InlineValue
+		public valueB: InlineValue,
+		public into?: string
 	) {
 		super()
+	}
+	get variables() {
+		return [this.into || this.from]
 	}
 }
 
