@@ -8,6 +8,10 @@
 		"test:coverage": "jest --coverage",
 		"prettier": "prettier --write ."
 	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/eddow/linxjs.git"
+	},
 	"author": "fmdm",
 	"license": "ISC",
 	"devDependencies": {

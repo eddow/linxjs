@@ -16,7 +16,7 @@ First, everything is in a "string" definition, so it's not compiled but interpre
 
 ### Why ?
 
-For now, the "in-mem" executor is implemented (the one using `Array.filter` and `Array.sort`) though the purpose at long term is to have it connected to some ORM as possible.
+For now, the "in-mem" executor is implemented (the one using `Array.filter` and `Array.sort`) though the purpose at long term is to have it connected to some ORM/GraphQL/... as possible.
 
 ## How ?
 
@@ -39,6 +39,6 @@ No, the library does not parse JS. It stops at linq keywords to delimitate what 
 
 ### Stages
 
-1- Parsing: Take the string fragments and arguments and create a list of `Transformations` along a selection
-2- This information can be interpreted. As stated before, here, only the in-memory interpretation is implemented.
-3- Profit
+- Parsing: Take the string fragments and arguments and create a list of `Transformations` along a selection
+- This information can be interpreted. As stated before, here, only the in-memory interpretation is implemented.
+- Profit
