@@ -17,7 +17,7 @@ export type Hardcodable<T = any> = T | InlineValue<T>
 
 export interface Parsed {
 	transformations: Transformation[]
-	select?: InlineValue
+	selection?: InlineValue
 }
 
 export class SyntaxError extends Error {
@@ -140,7 +140,7 @@ export class TemplateStringsReader {
 	 * @param simple If true, the value is parsed without commas. Defaults to false.
 	 * @returns The parsed InlineValue.
 	 */
-	nextValue(simple?: 'simple'): InlineValue {
+	nextValue<T = any>(type?: 'simple' | 'external'): Hardcodable<T> {
 		this.trim()
 		let next = this.parts[this.part].substring(this.posInPart)
 		if (!next.trim()) {
@@ -153,10 +153,11 @@ export class TemplateStringsReader {
 				args: []
 			},
 			nextRead
+		if (type === 'external') throw new SyntaxError(this, 'Expecting external value: ${...}')
 		do {
 			nextRead = jsFirst.exec(next)
 			const commaLess = noComma.exec(next)
-			if (simple && commaLess && (!nextRead || nextRead[0].length > commaLess[0].length))
+			if (type === 'simple' && commaLess && (!nextRead || nextRead[0].length > commaLess[0].length))
 				nextRead = commaLess
 			if (!nextRead) {
 				parsable.strings.push(next.trimStart())
@@ -213,9 +214,9 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
 				transformations.push(new WhereTransformation(reader.nextValue()))
 				break
 			case 'select':
-				const select = reader.nextValue()
+				const selection = reader.nextValue()
 				if (!reader.ended()) throw new SyntaxError(reader, 'Expecting `select` to finish the query')
-				return { transformations, select }
+				return { transformations, selection }
 			case 'orderby':
 				const specs = { ascending: true, descending: false }
 				const orders: OrderSpec[] = []
@@ -237,7 +238,7 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
 				transformations.push(
 					new JoinTransformation(
 						reader.nextWord(),
-						reader.expect('in') && reader.nextValue(),
+						reader.expect('in') && reader.nextValue('external'),
 						reader.expect('on') && reader.nextValue(),
 						reader.expect('equals') && reader.nextValue(),
 						reader.isWord('into') ? reader.nextWord() : undefined

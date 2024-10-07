@@ -7,14 +7,16 @@ import {
 	WhereTransformation
 } from './transformations'
 
+type PartialResultGenerator<T = any> = Generator<T[], any, any>
+
 export class JSSyntaxError extends Error {
-	constructor(code: string, parent: Error) {
+	constructor(code: string, parent?: Error) {
 		super(`Unparsable code: ${code}`)
 	}
 }
 
 interface Partial<T = any> {
-	enumerable: Generator<T>
+	enumerable: PartialResultGenerator<T>
 	variables: string[]
 }
 
@@ -41,16 +43,31 @@ function keySort(a: { key: any }, b: { key: any }) {
 
 const transform = {
 	*FromTransformation(
-		enumerable: Generator<any>,
+		enumerable: PartialResultGenerator<any>,
 		variables: string[],
 		{ source }: FromTransformation
 	) {
-		const genSource = <Generator<any>>source // TODO case when a name is given -> InlineValue
-		if (!variables.length) for (const v of genSource) yield [v]
-		else for (const itm of enumerable) for (const v of genSource) yield [...itm, v]
+		const inlineVSource = <InlineValue>source,
+			genSource =
+				inlineVSource.strings && inlineVSource.args
+					? makeFunction(inlineVSource, variables)
+					: source
+		if (!variables.length) {
+			if (typeof genSource === 'function')
+				throw new JSSyntaxError('First source must be given explicitly, not as a function')
+			for (const v of <PartialResultGenerator>genSource) yield [v]
+		} else {
+			if (typeof genSource === 'function')
+				// TODO test me
+				for (const itm of enumerable) for (const v of genSource.apply(null, itm)) yield [...itm, v]
+			else {
+				const tableSource = [...(<PartialResultGenerator>genSource)]
+				for (const itm of enumerable) for (const v of tableSource) yield [...itm, v]
+			}
+		}
 	},
 	*WhereTransformation(
-		enumerable: Generator<any>,
+		enumerable: PartialResultGenerator<any>,
 		variables: string[],
 		{ predicate }: WhereTransformation
 	) {
@@ -58,7 +75,7 @@ const transform = {
 		for (const itm of enumerable) if (predicateFct(itm)) yield itm
 	},
 	*OrderbyTransformation(
-		enumerable: Generator<any>,
+		enumerable: PartialResultGenerator<any>,
 		variables: string[],
 		{ orders }: OrderbyTransformation
 	) {
@@ -78,44 +95,51 @@ const transform = {
 		})
 	},
 	*LetTransformation(
-		enumerable: Generator<any>,
+		enumerable: PartialResultGenerator<any>,
 		variables: string[],
-		{ variable, value }: LetTransformation
+		{ value }: LetTransformation
 	) {
 		const fct = makeFunction(value, variables)
 		for (const v of enumerable) yield [...v, fct(v)]
 	},
 	*JoinTransformation(
-		enumerable: Generator<any>,
+		enumerable: PartialResultGenerator<any>,
 		variables: string[],
 		{ from, source, valueA, valueB, into }: JoinTransformation
 	) {
-		const genSource = <Generator<any>>source // TODO case when a name is given -> InlineValue
-		let fctPartial: Function | undefined, fctSource: Function | undefined
+		const genSource = source,
+			tablePartial = [...enumerable],
+			tableSource = [...genSource]
+		let sortedPartial: { key: any; value: any }[] | undefined,
+			sortedSource: { key: any; value: any }[] | undefined
+
 		try {
-			fctPartial = makeFunction(valueA, variables)
-			fctSource = makeFunction(valueB, [from])
+			const fctPartial = makeFunction(valueA, variables),
+				fctSource = makeFunction(valueB, [from])
+			sortedPartial = tablePartial.map((p) => ({ key: fctPartial(p), value: p })).sort(keySort)
+			sortedSource = tableSource.map((s) => ({ key: fctSource([s]), value: s })).sort(keySort)
 		} catch (e) {
 			try {
-				fctPartial = makeFunction(valueB, [from])
-				fctSource = makeFunction(valueA, variables)
+				const fctPartial = makeFunction(valueB, variables),
+					fctSource = makeFunction(valueA, [from])
+				sortedPartial = tablePartial.map((p) => ({ key: fctPartial(p), value: p })).sort(keySort)
+				sortedSource = tableSource.map((s) => ({ key: fctSource([s]), value: s })).sort(keySort)
 			} catch (e) {}
 		}
-		if (fctPartial && fctSource) {
-			const tableP = [...enumerable].map((p) => ({ key: fctPartial(p), value: p })).sort(keySort),
-				tableS = [...genSource].map((s) => ({ key: fctSource([s]), value: s })).sort(keySort)
-
+		if (sortedPartial && sortedSource) {
 			let pi = 0,
 				si = 0
-			while (pi < tableP.length && si < tableS.length) {
-				if (tableP[pi].key < tableS[si].key) pi++
-				else if (tableP[pi].key > tableS[si].key) si++
+			while (pi < sortedPartial.length && si < sortedSource.length) {
+				if (sortedPartial[pi].key < sortedSource[si].key) pi++
+				else if (sortedPartial[pi].key > sortedSource[si].key) si++
 				else {
-					const key = tableP[pi].key,
+					const key = sortedPartial[pi].key,
 						factorP: any[] = [],
 						factorS: any[] = []
-					for (; pi < tableP.length && tableP[pi].key === key; pi++) factorP.push(tableP[pi].value)
-					for (; si < tableS.length && tableS[si].key === key; si++) factorS.push(tableS[si].value)
+					for (; pi < sortedPartial.length && sortedPartial[pi].key === key; pi++)
+						factorP.push(sortedPartial[pi].value)
+					for (; si < sortedSource.length && sortedSource[si].key === key; si++)
+						factorS.push(sortedSource[si].value)
 					if (into) for (const p of factorP) yield [...p, factorS]
 					else for (const p of factorP) for (const s of factorS) yield [...p, s]
 				}
@@ -127,17 +151,17 @@ const transform = {
 				fctB = valueB ? makeFunction(valueB, allVars) : null,
 				fct = fctB ? (v: any[]) => fctA(v) === fctB(v) : fctA
 			if (into)
-				for (const elmA of enumerable) {
+				for (const elmA of tablePartial) {
 					const paired: any[] = []
-					for (const elmB of genSource) {
+					for (const elmB of tableSource) {
 						const joined = [...elmA, elmB]
 						if (fct(joined)) paired.push(elmB)
 					}
 					yield [...elmA, paired]
 				}
 			else
-				for (const elmA of enumerable) {
-					for (const elmB of genSource) {
+				for (const elmA of tablePartial) {
+					for (const elmB of tableSource) {
 						const joined = [...elmA, elmB]
 						if (fct(joined)) yield joined
 					}
@@ -146,16 +170,16 @@ const transform = {
 	}
 }
 
-export default function* memLinq({ transformations, select }: Parsed): any {
-	let enumerable = (function* (): Generator<any> {})(),
+export default function* memLinq({ transformations, selection }: Parsed): any {
+	let enumerable = (function* (): PartialResultGenerator<any> {})(),
 		variables: string[] = []
 	for (const transformation of transformations) {
 		enumerable = transform[transformation.constructor.name](enumerable, variables, transformation)
 		variables = [...variables, ...transformation.variables]
 	}
 
-	if (select) {
-		const selectFct = makeFunction(select, variables)
+	if (selection) {
+		const selectFct = makeFunction(selection, variables)
 		for (const v of enumerable) yield selectFct(v)
-	} else for (const v of enumerable) yield v[0] // TODO reduce: all props
+	} else for (const v of enumerable) yield v[0] // TODO reduce: all props?
 }

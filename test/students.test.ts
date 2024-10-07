@@ -77,7 +77,6 @@ describe('students', () => {
 	})
 
 	test('join', () => {
-		// TODO order by left key
 		expect([
 			...l`from s in ${students}
 				join r in ${registration} on s.name equals r.name

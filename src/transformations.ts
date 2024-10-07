@@ -50,7 +50,7 @@ export class LetTransformation extends Transformation {
 export class JoinTransformation<T = any> extends Transformation {
 	constructor(
 		public from: string,
-		public source: Hardcodable<Generator<T>>,
+		public source: Generator<T>,
 		public valueA: InlineValue,
 		public valueB: InlineValue,
 		public into?: string
@@ -64,8 +64,6 @@ export class JoinTransformation<T = any> extends Transformation {
 
 /* TODO:
 	group
-	join ... into ...
-Distinct
 Aggregation methods (e.g., Any, All, Count, Sum, Average, Min, Max)
 Take / Skip for pagination
 */

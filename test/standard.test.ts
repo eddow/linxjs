@@ -61,6 +61,20 @@ describe('standard', () => {
 			{ n: 9, nm: [9] },
 			{ n: 10, nm: [10] }
 		])
+		expect([
+			...l`from n in ${numbers} join m in ${numbers} on m equals n into nm select {n, nm}`
+		]).toEqual([
+			{ n: 1, nm: [1] },
+			{ n: 2, nm: [2] },
+			{ n: 3, nm: [3] },
+			{ n: 4, nm: [4] },
+			{ n: 5, nm: [5] },
+			{ n: 6, nm: [6] },
+			{ n: 7, nm: [7] },
+			{ n: 8, nm: [8] },
+			{ n: 9, nm: [9] },
+			{ n: 10, nm: [10] }
+		])
 	})
 
 	/*test('from join into', () => {
