@@ -5,8 +5,6 @@ const l = linq(memLinq)
 describe('standard', () => {
 	test('where', () => {
 		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-		const rv = l`from n in ${numbers} where ${(n) => n % 2 === 0}`
-		debugger
 		expect([...l`from n in ${numbers} where ${(n) => n % 2 === 0}`]).toEqual([2, 4, 6, 8, 10])
 		expect([...l`from n in ${numbers} where n % 2 === 0`]).toEqual([2, 4, 6, 8, 10])
 	})
@@ -16,6 +14,18 @@ describe('standard', () => {
 			3, 5, 7, 9, 11
 		])
 		expect([...l`from n in ${numbers} where n % 2 === 0 select n + 1`]).toEqual([3, 5, 7, 9, 11])
+	})
+	test('compose value', () => {
+		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+		expect([
+			...l`from n in ${numbers} where n % 2 === 0 select { n, inc: ${(n) => n + 1} }`
+		]).toEqual([
+			{ n: 2, inc: 3 },
+			{ n: 4, inc: 5 },
+			{ n: 6, inc: 7 },
+			{ n: 8, inc: 9 },
+			{ n: 10, inc: 11 }
+		])
 	})
 	test('orderby', () => {
 		const numbers = [1, 10, 2, 9, 3, 8, 4, 7, 5, 6]

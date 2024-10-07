@@ -15,25 +15,31 @@ export class JSSyntaxError extends Error {
 	}
 }
 
-interface Partial<T = any> {
-	enumerable: PartialResultGenerator<T>
-	variables: string[]
-}
+const linxArgName = '$args$linx$'
 
 function makeFunction(iv: InlineValue | Function, variables: string[]) {
-	let fct: Function
-	if (typeof iv === 'function') fct = iv
-	else {
-		const value = iv.strings.map((s, i) => (i < iv.args.length ? `${s}${iv.args[i]}` : s)).join()
-
-		try {
-			fct = new Function(variables.join(','), `return ${value}`)
-		} catch (e) {
-			throw new JSSyntaxError(value, e)
-		}
+	if (typeof iv === 'function') return (args: any[]) => iv(...args)
+	console.assert([iv.args.length, iv.args.length + 1].includes(iv.strings.length))
+	if (iv.args.length) {
+		const ivStrings = [...iv.strings],
+			[strings, last] =
+				iv.strings.length > iv.args.length ? [ivStrings, ivStrings.pop()] : [ivStrings, ''],
+			fct = new Function(
+				[linxArgName, ...variables].join(','),
+				'return ' + strings.map((s, i) => `${s} ${linxArgName}[${i}]`).join('') + last
+			)
+		return (args: any[]) =>
+			fct(
+				iv.args.map((iva) => (typeof iva === 'function' ? iva(...args) : iva)),
+				...args
+			)
 	}
-	return function (v: any[]) {
-		return fct(...v)
+	const value = iv.strings[0]
+	try {
+		const fct = new Function(variables.join(','), `return ${value}`)
+		return (args: any[]) => fct(...args)
+	} catch (e) {
+		throw new JSSyntaxError(value, e)
 	}
 }
 

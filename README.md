@@ -28,7 +28,7 @@ prefix`someString ${someValue} andSoOn`
 
 allows the function prefix to receive these arguments :
 
-- The string fragments (here: "someString " and " andSoOn")
+- The string fragments (here: `"someString "` and `" andSoOn"`)
 - The _values_ given (here `someValue`) without going through the string process - the received value is directly the object
 
 The linq parser is therefore a parser going through these two lists at the same time.

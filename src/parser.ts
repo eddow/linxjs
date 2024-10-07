@@ -45,13 +45,13 @@ const linqKeywords = [
 	'in',
 	'let'
 ]
-const keywordPattern = linqKeywords.join('|') // Join keywords with '|'
-const jsFirst = new RegExp(`\\s*(.*?)(?=\\s+(${keywordPattern}))`, 'i')
-const noComma = new RegExp(`\\s*([^,]*)`, 'i')
+const keywordPattern = linqKeywords.join('|')
+const jsFirst = new RegExp(`(\\s*(.*?))(?:(?:\\s|^)(${keywordPattern})(?:\\s|$))`, 'i')
+const noComma = new RegExp(`(\\s*([^,]*))`, 'i')
 
 export class TemplateStringsReader {
 	constructor(
-		public parts: TemplateStringsArray,
+		public parts: string[],
 		public args: any[],
 		public part: number = 0,
 		public posInPart: number = 0
@@ -166,8 +166,8 @@ export class TemplateStringsReader {
 				this.posInPart = 0
 				next = this.parts[this.part]
 			} else {
-				parsable.strings.push(nextRead[1])
-				this.posInPart += nextRead[0].length
+				parsable.strings.push(nextRead[2])
+				this.posInPart += nextRead[1].length
 			}
 		} while (!this.ended() && !nextRead)
 		return parsable
@@ -201,7 +201,10 @@ export class TemplateStringsReader {
 }
 
 export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
-	const reader = new TemplateStringsReader(parts, args)
+	const reader = new TemplateStringsReader(
+		parts.map((p) => p.replace(/\n|\r/g, ' ')), //cr & lf always screw up regex-es
+		args
+	)
 	const transformations: Transformation[] = []
 	while (!reader.ended()) {
 		switch (reader.nextWord()) {
@@ -248,7 +251,7 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
 			case 'group':
 				throw 'todo'
 			default:
-				throw new SyntaxError(reader, 'Expecting `select`, `join` or `where`')
+				throw new SyntaxError(reader, 'Expecting linq set transformation')
 		}
 	}
 	return { transformations }
