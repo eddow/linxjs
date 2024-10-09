@@ -79,9 +79,8 @@ export class GroupTransformation extends Transformation {
 }
 
 /* TODO:
-	group
 Aggregation methods (e.g., Any, All, Count, Sum, Average, Min, Max)
 Take / Skip for pagination
 */
 
-// TODO: Templates -> virer les `any`
+// TODO: Templates -> remove as many `any` as possible

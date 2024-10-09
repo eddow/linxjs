@@ -1,6 +1,11 @@
 {
 	"name": "linxjs",
 	"private": true,
+	"scripts": {
+		"test": "jest",
+		"test:coverage": "jest --coverage",
+		"prettier": "prettier --write ."
+	},
 	"workspaces": [
 		"packages/*"
 	]
