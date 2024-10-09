@@ -27,13 +27,13 @@ function transmissibleFunction(
 	return Object.assign(fct, values ? { jsCode, values } : { jsCode })
 }
 
-const linxArgName = '$args$linx$'
+export const linxArgName = '$args$linx$',
+	linxArguments = new RegExp(`${linxArgName.replace(/\$/g, '\\$')}\\[(\\d+)\\]`, 'g')
 
 export function makeFunction<T = any>(
 	iv: Hardcodable<Function>,
 	variables: string[]
 ): TransmissibleFunction {
-	if (!variables) debugger
 	if (typeof iv === 'function')
 		return transmissibleFunction((args: any[]) => iv(...args), iv.toString())
 	console.assert([iv.args.length, iv.args.length + 1].includes(iv.strings.length))

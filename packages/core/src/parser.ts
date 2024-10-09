@@ -175,10 +175,10 @@ export class TemplateStringsReader {
 		return parsable
 	}
 
-	isWord(...words: string[]) {
+	isWord<W extends string>(...words: W[]): W | false {
 		const word = this.peekWord()
-		if (!word || !words.includes(word)) return false
-		return this.nextWord()
+		if (!word || !words.includes(<W>word)) return false
+		return <W>this.nextWord()
 	}
 
 	/**

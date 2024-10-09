@@ -5,7 +5,7 @@
 	"testEnvironment": "node",
 	"moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json", "node"],
 	"moduleNameMapper": {
-		"^~/(.*)$": "<rootDir>/src/$1"
+		"^@linxjs/(.*)$": "<rootDir>/../../packages/$1/src"
 	},
 	"coverageReporters": ["lcov"]
 }

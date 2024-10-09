@@ -1,21 +1,31 @@
-import { keyedGroup, makeFunction, SemanticError } from './internals'
-import { InlineValue, Parsed } from './parser'
 import {
+	keyedGroup,
+	makeFunction,
+	SemanticError,
+	InlineValue,
+	Parsed,
 	FromTransformation,
 	GroupTransformation,
 	JoinTransformation,
 	LetTransformation,
 	OrderbyTransformation,
-	WhereTransformation
-} from './transformations'
+	WhereTransformation,
+	Transformation
+} from '@linxjs/core'
 
-type PartialResultGenerator<T = any> = Generator<T[], any, any>
+type PartialResultGenerator<T = any> = Iterable<T[], any, any>
 
 function keySort(a: { key: any }, b: { key: any }) {
 	return a.key < b.key ? -1 : a.key > b.key ? 1 : 0
 }
 
-const transform = {
+type TransformationFunction = (
+	enumerable: PartialResultGenerator<any>,
+	variables: string[],
+	transformation: Transformation
+) => Iterable<any[], any, any>
+
+const transform: Record<string, TransformationFunction> = {
 	*FromTransformation(
 		enumerable: PartialResultGenerator<any>,
 		variables: string[],
@@ -123,7 +133,7 @@ const transform = {
 	*GroupTransformation(
 		enumerable: PartialResultGenerator<any>,
 		variables: string[],
-		{ value, key, into }: GroupTransformation
+		{ value, key }: GroupTransformation
 	) {
 		const fctValue = makeFunction(value, variables),
 			fctKey = makeFunction(key, variables)
@@ -140,7 +150,7 @@ const transform = {
 }
 
 export default function* memLinq({ transformations, selection }: Parsed): any {
-	let enumerable = <any[]>[],
+	let enumerable: PartialResultGenerator<any> = <any[]>[],
 		variables: string[] | undefined = undefined
 	for (const transformation of transformations) {
 		enumerable = transform[transformation.constructor.name](enumerable, variables, transformation)
@@ -150,8 +160,5 @@ export default function* memLinq({ transformations, selection }: Parsed): any {
 	if (selection) {
 		const selectFct = makeFunction(selection, variables)
 		for (const v of enumerable) yield selectFct(v)
-	} else
-		for (const v of enumerable) {
-			yield v[0]
-		}
+	} else for (const v of enumerable) yield v[0]
 }

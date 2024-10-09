@@ -11,7 +11,7 @@ export class Transformation {
 export class FromTransformation<T = any> extends Transformation {
 	constructor(
 		public from: string,
-		public source: Hardcodable<Generator<T>>
+		public source: Hardcodable<Iterable<T>>
 	) {
 		super()
 	}
@@ -52,7 +52,7 @@ export class LetTransformation extends Transformation {
 export class JoinTransformation<T = any> extends Transformation {
 	constructor(
 		public from: string,
-		public source: Generator<T>,
+		public source: Iterable<T>,
 		public valueA: InlineValue,
 		public valueB: InlineValue,
 		public into?: string

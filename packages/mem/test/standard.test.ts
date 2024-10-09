@@ -1,16 +1,19 @@
-import linq, { keyedGroup, memLinq, SemanticError, SyntaxError } from '../src'
+import linq, { keyedGroup, SemanticError, SyntaxError } from '@linxjs/core'
+import memLinq from '../src'
 
 const l = linq(memLinq)
 
 describe('standard', () => {
 	test('where', () => {
 		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-		expect([...l`from n in ${numbers} where ${(n) => n % 2 === 0}`]).toEqual([2, 4, 6, 8, 10])
+		expect([...l`from n in ${numbers} where ${(n: number) => n % 2 === 0}`]).toEqual([
+			2, 4, 6, 8, 10
+		])
 		expect([...l`from n in ${numbers} where n % 2 === 0`]).toEqual([2, 4, 6, 8, 10])
 	})
 	test('select', () => {
 		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-		expect([...l`from n in ${numbers} where n % 2 === 0 select ${(n) => n + 1}`]).toEqual([
+		expect([...l`from n in ${numbers} where n % 2 === 0 select ${(n: number) => n + 1}`]).toEqual([
 			3, 5, 7, 9, 11
 		])
 		expect([...l`from n in ${numbers} where n % 2 === 0 select n + 1`]).toEqual([3, 5, 7, 9, 11])
@@ -18,7 +21,7 @@ describe('standard', () => {
 	test('compose value', () => {
 		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 		expect([
-			...l`from n in ${numbers} where n % 2 === 0 select { n, inc: ${(n) => n + 1} }`
+			...l`from n in ${numbers} where n % 2 === 0 select { n, inc: ${(n: number) => n + 1} }`
 		]).toEqual([
 			{ n: 2, inc: 3 },
 			{ n: 4, inc: 5 },

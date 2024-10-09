@@ -1,8 +1,24 @@
-import linq, { memLinq } from '../src'
+import linq from '@linxjs/core'
+import memLinq from '../src'
 
 const l = linq(memLinq)
 
-const students = [
+interface Student {
+	name: string
+	age: number
+}
+
+interface Course {
+	name: string
+	hours: number
+}
+
+interface Registration {
+	name: string
+	course: string
+}
+
+const students: Student[] = [
 	{ name: 'Mark', age: 22 },
 	{ name: 'Peter', age: 20 },
 	{ name: 'Sara', age: 21 },
@@ -11,7 +27,7 @@ const students = [
 	{ name: 'Bob', age: 21 },
 	{ name: 'Marlene', age: 22 }
 ]
-const courses = [
+const courses: Course[] = [
 	{ name: 'Math', hours: 60 },
 	{ name: 'English', hours: 40 },
 	{ name: 'Chemistry', hours: 20 },
@@ -20,7 +36,7 @@ const courses = [
 	{ name: 'Geography', hours: 15 }
 ]
 
-const registration = [
+const registration: Registration[] = [
 	{ name: 'Mark', course: 'Math' },
 	{ name: 'Peter', course: 'English' },
 	{ name: 'Sara', course: 'Chemistry' },
@@ -108,7 +124,7 @@ describe('students', () => {
 		expect([
 			...l`from s in ${students}
 				join r in ${registration} on r.name equals s.name into courses
-				select ${(s, courses) => ({ name: s.name, courses: courses.map((c) => c.course) })}`
+				select ${(s: Student, courses: Registration[]) => ({ name: s.name, courses: courses.map((c) => c.course) })}`
 		]).toEqual([
 			{ name: 'Bob', courses: ['Geography'] },
 			{ name: 'John', courses: ['History', 'Geography'] },
