@@ -11,7 +11,7 @@ export class Transformation {
 export class FromTransformation<T = any> extends Transformation {
 	constructor(
 		public from: string,
-		public source: Hardcodable<Iterable<T>>
+		public source: Hardcodable<AsyncIterable<T>>
 	) {
 		super()
 	}
@@ -52,7 +52,7 @@ export class LetTransformation extends Transformation {
 export class JoinTransformation<T = any> extends Transformation {
 	constructor(
 		public from: string,
-		public source: Iterable<T>,
+		public source: AsyncIterable<T>,
 		public valueA: InlineValue,
 		public valueB: InlineValue,
 		public into?: string
@@ -69,6 +69,18 @@ export class GroupTransformation extends Transformation {
 	constructor(
 		public value: Hardcodable<Function>,
 		public key: Hardcodable<Function>,
+		public into?: string | false
+	) {
+		super()
+	}
+	newVariables() {
+		return this.into ? [this.into] : []
+	}
+}
+
+export class SelectTransformation extends Transformation {
+	constructor(
+		public value: Hardcodable<Function>,
 		public into?: string | false
 	) {
 		super()

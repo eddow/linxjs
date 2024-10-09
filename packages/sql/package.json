@@ -39,6 +39,7 @@
 		"@rollup/rollup-win32-x64-msvc": "^4.18.0"
 	},
 	"dependencies": {
-		"@linxjs/core": "^1.0.0"
+		"@linxjs/core": "^1.0.0",
+		"esprima": "^4.0.1"
 	}
 }

@@ -5,6 +5,7 @@ import {
 	LetTransformation,
 	OrderbyTransformation,
 	type OrderSpec,
+	SelectTransformation,
 	Transformation,
 	WhereTransformation
 } from './transformations'
@@ -15,11 +16,6 @@ export interface InlineValue {
 }
 
 export type Hardcodable<T = any> = T | InlineValue
-
-export interface Parsed {
-	transformations: Transformation[]
-	selection?: InlineValue
-}
 
 export class SyntaxError extends Error {
 	constructor(reader: TemplateStringsReader, message: string) {
@@ -202,7 +198,7 @@ export class TemplateStringsReader {
 	}
 }
 
-export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
+export function parse(parts: TemplateStringsArray, ...args: any[]): Transformation[] {
 	const reader = new TemplateStringsReader(
 		parts.map((p) => p.replace(/\n|\r/g, ' ')), //cr & lf always screw up regex-es
 		args
@@ -221,10 +217,6 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
 			case 'where':
 				transformations.push(new WhereTransformation(reader.nextValue()))
 				break
-			case 'select':
-				const selection = reader.nextValue()
-				if (!reader.ended()) throw new SyntaxError(reader, 'Expecting `select` to finish the query')
-				return { transformations, selection }
 			case 'orderby':
 				const specs = { ascending: true, descending: false }
 				const orders: OrderSpec[] = []
@@ -262,9 +254,18 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
 					)
 				)
 				break
+			case 'select':
+				transformations.push(
+					new SelectTransformation(
+						reader.nextValue(),
+						reader.isWord('into') ? reader.nextWord() : undefined
+					)
+				)
+				if (!reader.ended()) throw new SyntaxError(reader, 'Expecting `select` to finish the query')
+				break
 			default:
 				throw new SyntaxError(reader, 'Expecting linq set transformation')
 		}
 	}
-	return { transformations }
+	return transformations
 }

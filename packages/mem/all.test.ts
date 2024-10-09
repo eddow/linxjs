@@ -1,5 +1,5 @@
-import memLinq from '../src'
-import { allTests, type Student, type Course, type Registration } from '../../../test'
+import memLinq from './src'
+import { allTests, type Student, type Course, type Registration } from '../../test'
 
 const students: Student[] = [
 	{ name: 'Mark', age: 22 },
@@ -35,3 +35,12 @@ const registrations: Registration[] = [
 ]
 
 allTests(memLinq, students, courses, registrations)
+
+describe('standard', () => {
+	test('where', async () => {
+		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+		expect(
+			await memLinq`from n in ${numbers} where ${(n: number) => n % 2 === 0}`.toArray()
+		).toEqual([2, 4, 6, 8, 10])
+	})
+})

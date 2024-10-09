@@ -1,4 +1,4 @@
-import linq from '@linxjs/core'
+import type { Linq } from '@linxjs/core'
 
 export interface Student {
 	name: string
@@ -15,12 +15,10 @@ export interface Registration {
 	course: string
 }
 
-export default function (linquer: any, students: any, courses: any, registrations: any) {
-	const l = linq(linquer)
-
+export default function (l: Linq, students: any, courses: any, registrations: any) {
 	describe('students', () => {
-		test('orderby', () => {
-			expect([...l`from s in ${students} orderby s.age, s.name select s.name`]).toEqual([
+		test('orderby', async () => {
+			expect(await l`from s in ${students} orderby s.age, s.name select s.name`.toArray()).toEqual([
 				'Peter',
 				'Bob',
 				'Sara',
@@ -30,10 +28,10 @@ export default function (linquer: any, students: any, courses: any, registration
 				'Tim'
 			])
 		})
-		test('let', () => {
-			expect([
-				...l`from s in ${students} let year = 1979-s.age select {name: s.name, year}`
-			]).toEqual([
+		test('let', async () => {
+			expect(
+				await l`from s in ${students} let year = 1979-s.age select {name: s.name, year}`.toArray()
+			).toEqual([
 				{
 					name: 'Mark',
 					year: 1957
@@ -65,14 +63,14 @@ export default function (linquer: any, students: any, courses: any, registration
 			])
 		})
 
-		test('join', () => {
-			expect([
-				...l`from s in ${students}
+		test('join', async () => {
+			expect(
+				await l`from s in ${students}
 				join r in ${registrations} on s.name equals r.name
 				join c in ${courses} on r.course equals c.name
 				orderby s.name, c.course
-				select { name: s.name, course: c.name, hours: c.hours }`
-			]).toEqual([
+				select { name: s.name, course: c.name, hours: c.hours }`.toArray()
+			).toEqual([
 				{ name: 'Bob', course: 'Geography', hours: 15 },
 				{ name: 'John', course: 'Geography', hours: 15 },
 				{ name: 'John', course: 'History', hours: 10 },
@@ -87,12 +85,12 @@ export default function (linquer: any, students: any, courses: any, registration
 			])
 		})
 
-		test('join into', () => {
-			expect([
-				...l`from s in ${students}
+		test('join into', async () => {
+			expect(
+				await l`from s in ${students}
 				join r in ${registrations} on r.name equals s.name into courses
-				select ${(s: Student, courses: Registration[]) => ({ name: s.name, courses: courses.map((c) => c.course) })}`
-			]).toEqual([
+				select ${(s: Student, courses: Registration[]) => ({ name: s.name, courses: courses.map((c) => c.course) })}`.toArray()
+			).toEqual([
 				{ name: 'Bob', courses: ['Geography'] },
 				{ name: 'John', courses: ['History', 'Geography'] },
 				{ name: 'Mark', courses: ['Math', 'English'] },
@@ -102,14 +100,14 @@ export default function (linquer: any, students: any, courses: any, registration
 			])
 		})
 
-		test('join into from', () => {
-			expect([
-				...l`from s in ${students}
+		test('join into from', async () => {
+			expect(
+				await l`from s in ${students}
 				join r in ${registrations} on s.name equals r.name into courses
 				from c in courses
 				orderby s.name, c.course
-				select {name: s.name, course: c.course }`
-			]).toEqual([
+				select {name: s.name, course: c.course }`.toArray()
+			).toEqual([
 				{ name: 'Bob', course: 'Geography' },
 				{ name: 'John', course: 'Geography' },
 				{ name: 'John', course: 'History' },
