@@ -1,5 +1,6 @@
 import {
 	FromTransformation,
+	GroupTransformation,
 	JoinTransformation,
 	LetTransformation,
 	OrderbyTransformation,
@@ -8,12 +9,12 @@ import {
 	WhereTransformation
 } from './transformations'
 
-export interface InlineValue<T = any> {
+export interface InlineValue {
 	strings: string[]
 	args: any[]
 }
 
-export type Hardcodable<T = any> = T | InlineValue<T>
+export type Hardcodable<T = any> = T | InlineValue
 
 export interface Parsed {
 	transformations: Transformation[]
@@ -37,6 +38,7 @@ const linqKeywords = [
 	'join',
 	'orderby',
 	'group',
+	'by',
 	'into',
 	'ascending',
 	'descending',
@@ -207,7 +209,10 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
 	)
 	const transformations: Transformation[] = []
 	while (!reader.ended()) {
-		switch (reader.nextWord()) {
+		const transformation = reader.nextWord()
+		if (transformation !== 'from' && !transformations.length)
+			throw new SyntaxError(reader, 'First transformation is `from`')
+		switch (transformation) {
 			case 'from':
 				transformations.push(
 					new FromTransformation(reader.nextWord(), reader.expect('in') && reader.nextValue())
@@ -249,7 +254,14 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Parsed {
 				)
 				break
 			case 'group':
-				throw 'todo'
+				transformations.push(
+					new GroupTransformation(
+						reader.nextValue(),
+						reader.expect('by') && reader.nextValue(),
+						reader.isWord('into') && reader.nextWord()
+					)
+				)
+				break
 			default:
 				throw new SyntaxError(reader, 'Expecting linq set transformation')
 		}

@@ -1,8 +1,10 @@
+import { SemanticError } from './internals'
 import type { Hardcodable, InlineValue } from './parser'
 
 export class Transformation {
-	get variables() {
-		return <string[]>[]
+	newVariables(already?: string[]): string[] {
+		if (!already) throw new SemanticError(`${this.constructor.name} needs given already variables`)
+		return <string[]>already
 	}
 }
 
@@ -13,8 +15,8 @@ export class FromTransformation<T = any> extends Transformation {
 	) {
 		super()
 	}
-	get variables() {
-		return [this.from]
+	newVariables(already?: string[]) {
+		return already ? [...already, this.from] : [this.from]
 	}
 }
 
@@ -42,8 +44,8 @@ export class LetTransformation extends Transformation {
 	) {
 		super()
 	}
-	get variables() {
-		return [this.variable]
+	newVariables(already: string[]) {
+		return [...already, this.variable]
 	}
 }
 
@@ -57,8 +59,22 @@ export class JoinTransformation<T = any> extends Transformation {
 	) {
 		super()
 	}
-	get variables() {
-		return [this.into || this.from]
+	newVariables(already?: string[]) {
+		if (!already) throw new SemanticError(`${this.constructor.name} needs given already variables`)
+		return [...already, this.into || this.from]
+	}
+}
+
+export class GroupTransformation extends Transformation {
+	constructor(
+		public value: Hardcodable<Function>,
+		public key: Hardcodable<Function>,
+		public into?: string | false
+	) {
+		super()
+	}
+	newVariables() {
+		return this.into ? [this.into] : []
 	}
 }
 

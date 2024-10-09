@@ -1,4 +1,4 @@
-import linq, { memLinq } from '../src'
+import linq, { keyedGroup, memLinq, SemanticError, SyntaxError } from '../src'
 
 const l = linq(memLinq)
 
@@ -71,37 +71,34 @@ describe('standard', () => {
 			{ n: 9, nm: [9] },
 			{ n: 10, nm: [10] }
 		])
-		expect([
-			...l`from n in ${numbers} join m in ${numbers} on m equals n into nm select {n, nm}`
-		]).toEqual([
-			{ n: 1, nm: [1] },
-			{ n: 2, nm: [2] },
-			{ n: 3, nm: [3] },
-			{ n: 4, nm: [4] },
-			{ n: 5, nm: [5] },
-			{ n: 6, nm: [6] },
-			{ n: 7, nm: [7] },
-			{ n: 8, nm: [8] },
-			{ n: 9, nm: [9] },
-			{ n: 10, nm: [10] }
+	})
+
+	test('groupby', () => {
+		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+		const rv = [...l`from n in ${numbers} group n by n % 2`]
+		expect([...l`from n in ${numbers} group n by n % 2`]).toEqual([
+			keyedGroup(1, [1, 3, 5, 7, 9]),
+			keyedGroup(0, [2, 4, 6, 8, 10])
 		])
 	})
 
-	/*test('from join into', () => {
-		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-		expect([
-			...l`from n in ${numbers} from m in ${numbers} where n > m select {n, nm}`
-		]).toEqual([
-			{ n: 1, nm: [] },
-			{ n: 2, nm: [1] },
-			{ n: 3, nm: [1, 2] },
-			{ n: 4, nm: [1, 2, 3] },
-			{ n: 5, nm: [1, 2, 3, 4] },
-			{ n: 6, nm: [1, 2, 3, 4, 5] },
-			{ n: 7, nm: [1, 2, 3, 4, 5, 6] },
-			{ n: 8, nm: [1, 2, 3, 4, 5, 6, 7] },
-			{ n: 9, nm: [1, 2, 3, 4, 5, 6, 7, 8] },
-			{ n: 10, nm: [1, 2, 3, 4, 5, 6, 7, 8, 9] }
-		])
-	})*/
+	test('SemanticError', () => {
+		expect([...l`from n in ${[1, 2]} select n`]).toEqual([1, 2])
+		expect(() => [...l`from n in ${() => [1, 2]} select n`]).toThrow(SemanticError)
+		expect(() => [...l`from n in boom select n`]).toThrow(SemanticError)
+		expect(() => [...l`from n in ${[1, 2]} select blah`]).toThrow(ReferenceError)
+		expect(() => [...l`from n in ${[1, 2]} join m in ${[1, 2]} on n equals n select m+n`]).toThrow(
+			SemanticError
+		)
+	})
+
+	test('SyntaxError', () => {
+		expect(() => [...l`from n in ${[1, 2]} .`]).toThrow(SyntaxError)
+		expect(() => [...l`from n in ${[1, 2]} let x != n select x`]).toThrow(SyntaxError)
+		expect(() => [...l`from n in ${[1, 2]} into more`]).toThrow(SyntaxError)
+		expect(() => [...l`from n in ${[1, 2]} select n into something`]).toThrow(SyntaxError)
+		expect(() => [...l`from n in ${[1, 2]} join m in [n]`]).toThrow(SyntaxError)
+		expect(() => [...l`from n into ${[1, 2]}`]).toThrow(SyntaxError)
+		expect(() => [...l`join n in ${[1, 2]}`]).toThrow(SyntaxError)
+	})
 })
