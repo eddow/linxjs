@@ -1,8 +1,8 @@
 import linq from '@linxjs/core'
-import { memCollection } from './core'
+import { memCollector } from './core'
 
 export type PartialResult<T = any[]> = AsyncIterable<T, any, any>
 
-export { memCollection }
+export { memCollector as memCollection, greedyCollector as greedyCollection } from './core'
 
-export default linq(memCollection)
+export default linq(memCollector)

@@ -2,6 +2,7 @@ import {
 	BaseLinqEntry,
 	BaseLinqQSEntry,
 	Collector,
+	Group,
 	LinqCollection,
 	makeFunction,
 	orderFunction,
@@ -54,7 +55,7 @@ export class WhereTransformation extends Transformation {
 		variables: string[]
 	): LinqCollection<T> {
 		const predicateFct = makeFunction<T, boolean>(this.predicate, variables)
-		return enumerable.where((itm: T) => predicateFct(itm))
+		return enumerable.where((item: T) => predicateFct(item))
 	}
 }
 
@@ -73,7 +74,7 @@ export class LetTransformation extends Transformation {
 		variables: string[]
 	) {
 		const generateFct = makeFunction<T, R>(this.value, variables)
-		return enumerable.select<[...T, R]>((itm) => [...itm, generateFct(itm)])
+		return enumerable.select<[...T, R]>((item) => [...item, generateFct(item)])
 	}
 }
 
@@ -91,7 +92,7 @@ export class SelectTransformation extends Transformation {
 
 	transform<T extends BaseLinqQSEntry, R>(enumerable: LinqCollection<T>, variables: string[]) {
 		const generateFct = makeFunction<T, R>(this.value, variables)
-		return enumerable.select<[R]>((itm) => [generateFct(itm)])
+		return enumerable.select<[R]>((item) => [generateFct(item)])
 	}
 }
 
@@ -163,13 +164,8 @@ export class GroupTransformation extends Transformation {
 	) {
 		const generateFct = makeFunction<T, R>(this.value, variables),
 			keyFct = makeFunction<T, Primitive>(this.key, variables)
-		return enumerable.groupBy<R>(keyFct, generateFct)
+		return enumerable.groupBy<R>(keyFct, generateFct).select<[Group<R>]>((v) => [v])
 	}
 }
-
-/* TODO:
-Aggregation methods (e.g., Any, All, Count, Sum, Average, Min, Max)
-Take / Skip for pagination
-*/
 
 // TODO: Templates -> remove as many `any` as possible

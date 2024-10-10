@@ -1,4 +1,4 @@
-import { type Linq, SemanticError, SyntaxError } from '@linxjs/core'
+import { Group, type Linq, SemanticError, SyntaxError } from '@linxjs/core'
 
 export default function (from: Linq) {
 	describe('standard', () => {
@@ -77,15 +77,27 @@ export default function (from: Linq) {
 				{ n: 10, nm: [10] }
 			])
 		})
-		/*
-		//TODO - groupby without value selector
-		test('groupby', async () => {
+
+		test('group by', async () => {
 			const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-			expect((await from`n in ${numbers} group n by n % 2`.toArray()).toEqual([
-				keyedGroup(1, [1, 3, 5, 7, 9]),
-				keyedGroup(0, [2, 4, 6, 8, 10])
+			const grouped = from<Group<number>>
+			expect(
+				await grouped`n in ${numbers} group n by n % 2`
+					.select(async (g: Group<number>) => [g.key, await g.toArray()])
+					.toArray()
+			).toEqual([
+				[0, [2, 4, 6, 8, 10]],
+				[1, [1, 3, 5, 7, 9]]
 			])
-		})*/
+			expect(
+				await grouped`n in ${numbers} group by n % 2`
+					.select(async (g: Group<number>) => [g.key, await g.toArray()])
+					.toArray()
+			).toEqual([
+				[0, [2, 4, 6, 8, 10]],
+				[1, [1, 3, 5, 7, 9]]
+			])
+		})
 
 		test('SemanticError', async () => {
 			expect(await from`n in ${[1, 2]} select n`.toArray()).toEqual([1, 2])
