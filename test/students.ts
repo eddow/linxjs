@@ -15,10 +15,10 @@ export interface Registration {
 	course: string
 }
 
-export default function (l: Linq, students: any, courses: any, registrations: any) {
+export default function (from: Linq, students: any, courses: any, registrations: any) {
 	describe('students', () => {
 		test('orderby', async () => {
-			expect(await l`from s in ${students} orderby s.age, s.name select s.name`.toArray()).toEqual([
+			expect(await from`s in ${students} orderby s.age, s.name select s.name`.toArray()).toEqual([
 				'Peter',
 				'Bob',
 				'Sara',
@@ -30,7 +30,7 @@ export default function (l: Linq, students: any, courses: any, registrations: an
 		})
 		test('let', async () => {
 			expect(
-				await l`from s in ${students} let year = 1979-s.age select {name: s.name, year}`.toArray()
+				await from`s in ${students} let year = 1979-s.age select {name: s.name, year}`.toArray()
 			).toEqual([
 				{
 					name: 'Mark',
@@ -65,7 +65,7 @@ export default function (l: Linq, students: any, courses: any, registrations: an
 
 		test('join', async () => {
 			expect(
-				await l`from s in ${students}
+				await from`s in ${students}
 				join r in ${registrations} on s.name equals r.name
 				join c in ${courses} on r.course equals c.name
 				orderby s.name, c.course
@@ -87,13 +87,14 @@ export default function (l: Linq, students: any, courses: any, registrations: an
 
 		test('join into', async () => {
 			expect(
-				await l`from s in ${students}
-				join r in ${registrations} on r.name equals s.name into courses
+				await from`s in ${students}
+				join r in ${registrations} on s.name equals r.name into courses
 				select ${(s: Student, courses: Registration[]) => ({ name: s.name, courses: courses.map((c) => c.course) })}`.toArray()
 			).toEqual([
 				{ name: 'Bob', courses: ['Geography'] },
 				{ name: 'John', courses: ['History', 'Geography'] },
 				{ name: 'Mark', courses: ['Math', 'English'] },
+				{ name: 'Marlene', courses: [] },
 				{ name: 'Peter', courses: ['English', 'Chemistry'] },
 				{ name: 'Sara', courses: ['Chemistry', 'Physics'] },
 				{ name: 'Tim', courses: ['Physics', 'History'] }
@@ -102,7 +103,7 @@ export default function (l: Linq, students: any, courses: any, registrations: an
 
 		test('join into from', async () => {
 			expect(
-				await l`from s in ${students}
+				await from`s in ${students}
 				join r in ${registrations} on s.name equals r.name into courses
 				from c in courses
 				orderby s.name, c.course

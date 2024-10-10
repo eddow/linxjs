@@ -4,18 +4,29 @@ import {
 	JoinTransformation,
 	LetTransformation,
 	OrderbyTransformation,
-	type OrderSpec,
 	SelectTransformation,
 	Transformation,
 	WhereTransformation
 } from './transformations'
 
-export interface InlineValue {
-	strings: string[]
-	args: any[]
+export class InlineValue {
+	constructor(
+		public strings: string[] = [],
+		public args: any[] = []
+	) {}
 }
 
+export interface OrderSpec {
+	value: Hardcodable<Function>
+	way: 'asc' | 'desc'
+}
 export type Hardcodable<T = any> = T | InlineValue
+
+export interface Parsed {
+	enumerable: any
+	variables: string[]
+	transformations: Transformation[]
+}
 
 export class SyntaxError extends Error {
 	constructor(reader: TemplateStringsReader, message: string) {
@@ -146,10 +157,7 @@ export class TemplateStringsReader {
 			this.posInPart = 0
 			return this.args[this.part++]
 		}
-		let parsable: InlineValue = {
-				strings: [],
-				args: []
-			},
+		let parsable = new InlineValue(),
 			nextRead
 		if (type === 'external') throw new SyntaxError(this, 'Expecting external value: ${...}')
 		do {
@@ -198,16 +206,19 @@ export class TemplateStringsReader {
 	}
 }
 
-export function parse(parts: TemplateStringsArray, ...args: any[]): Transformation[] {
+export function parse(parts: TemplateStringsArray, ...args: any[]) {
 	const reader = new TemplateStringsReader(
 		parts.map((p) => p.replace(/\n|\r/g, ' ')), //cr & lf always screw up regex-es
 		args
 	)
-	const transformations: Transformation[] = []
+	const transformations: Transformation[] = [],
+		rv = {
+			from: reader.nextWord(),
+			source: reader.expect('in') && reader.nextValue(),
+			transformations
+		}
 	while (!reader.ended()) {
 		const transformation = reader.nextWord()
-		if (transformation !== 'from' && !transformations.length)
-			throw new SyntaxError(reader, 'First transformation is `from`')
 		switch (transformation) {
 			case 'from':
 				transformations.push(
@@ -218,13 +229,13 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Transformati
 				transformations.push(new WhereTransformation(reader.nextValue()))
 				break
 			case 'orderby':
-				const specs = { ascending: true, descending: false }
+				const specs: { [key: string]: 'asc' | 'desc' } = { ascending: 'asc', descending: 'desc' }
 				const orders: OrderSpec[] = []
 				do {
 					const order = reader.nextValue('simple'),
 						ascSpec = reader.isWord('ascending', 'descending'),
 						ascIsSpec = ascSpec && ascSpec in specs
-					orders.push({ value: order, asc: ascIsSpec ? specs[ascSpec] : true })
+					orders.push({ value: order, way: ascIsSpec ? specs[ascSpec] : 'asc' })
 				} while (reader.isRaw(','))
 				transformations.push(new OrderbyTransformation(orders))
 				break
@@ -248,7 +259,7 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Transformati
 			case 'group':
 				transformations.push(
 					new GroupTransformation(
-						reader.nextValue(),
+						reader.peekWord() === 'by' ? (x: any) => x : reader.nextValue(),
 						reader.expect('by') && reader.nextValue(),
 						reader.isWord('into') && reader.nextWord()
 					)
@@ -267,5 +278,5 @@ export function parse(parts: TemplateStringsArray, ...args: any[]): Transformati
 				throw new SyntaxError(reader, 'Expecting linq set transformation')
 		}
 	}
-	return transformations
+	return rv
 }

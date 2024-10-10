@@ -36,11 +36,12 @@ const registrations: Registration[] = [
 
 allTests(memLinq, students, courses, registrations)
 
-describe('standard', () => {
-	test('where', async () => {
+const from = memLinq
+describe('debug', () => {
+	test('here', async () => {
 		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 		expect(
-			await memLinq`from n in ${numbers} where ${(n: number) => n % 2 === 0}`.toArray()
-		).toEqual([2, 4, 6, 8, 10])
+			await from`n in ${numbers} from m in ${numbers} where m === n select n + m`.toArray()
+		).toEqual([2, 4, 6, 8, 10, 12, 14, 16, 18, 20])
 	})
 })

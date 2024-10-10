@@ -1,16 +1,24 @@
-import { LinqCollection } from './internals'
-import { parse } from './parser'
-import { Transformation } from './transformations'
+import { ai, BaseLinqEntry, BaseLinqQSEntry, Collector, LinqCollection } from './internals'
+import { parse, Hardcodable } from './parser'
 
 export * from './parser'
 export * from './transformations'
 export * from './internals'
 
-export type Linq<T = any> = (parts: TemplateStringsArray, ...args: any[]) => LinqCollection<T>
+export type Linq = <T extends BaseLinqQSEntry>(
+	parts: TemplateStringsArray,
+	...args: any[]
+) => LinqCollection<T>
 
-export default function linq<T = any>(doer: (p: Transformation[]) => LinqCollection<T>): Linq<T> {
-	return (parts: TemplateStringsArray, ...args: any[]) => {
-		const parsed = parse(parts, ...args)
-		return doer(parsed)
+export default function linq(collector: Collector): Linq {
+	return <T extends BaseLinqQSEntry>(parts: TemplateStringsArray, ...args: any[]) => {
+		const { transformations, from, source } = parse(parts, ...args)
+		let enumerable: LinqCollection<any> = collector(source).select((v) => [v]),
+			variables: string[] = [from]
+		for (const transformation of transformations) {
+			enumerable = transformation.transform(enumerable, variables, collector)
+			variables = transformation.newVariables(variables)
+		}
+		return enumerable.select<T>((v) => v[0])
 	}
 }

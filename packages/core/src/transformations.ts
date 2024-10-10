@@ -1,22 +1,47 @@
-import { SemanticError } from './internals'
-import type { Hardcodable, InlineValue } from './parser'
+import {
+	BaseLinqEntry,
+	BaseLinqQSEntry,
+	Collector,
+	LinqCollection,
+	makeFunction,
+	orderFunction,
+	Primitive,
+	SemanticError
+} from './internals'
+import type { OrderSpec, Hardcodable, InlineValue } from './parser'
 
-export class Transformation {
+export abstract class Transformation {
 	newVariables(already?: string[]): string[] {
 		if (!already) throw new SemanticError(`${this.constructor.name} needs given already variables`)
 		return <string[]>already
 	}
+	abstract transform(
+		enumerable: LinqCollection<any>,
+		variables: string[],
+		collector: Collector
+	): LinqCollection<any>
 }
 
-export class FromTransformation<T = any> extends Transformation {
+export class FromTransformation<O extends BaseLinqEntry> extends Transformation {
 	constructor(
 		public from: string,
-		public source: Hardcodable<AsyncIterable<T>>
+		public source: any
 	) {
 		super()
 	}
 	newVariables(already?: string[]) {
 		return already ? [...already, this.from] : [this.from]
+	}
+	transform<T extends BaseLinqQSEntry>(
+		enumerable: LinqCollection<T>,
+		variables: string[],
+		collector: Collector
+	): LinqCollection<[...T, O]> {
+		const otherFct = makeFunction<T, O>(this.source, variables)
+		return enumerable.multiplyBy<O, [...T, O]>(
+			(e) => collector<O>(otherFct(e)),
+			(t, o) => [...t, o]
+		)
 	}
 }
 
@@ -24,16 +49,12 @@ export class WhereTransformation extends Transformation {
 	constructor(public predicate: InlineValue) {
 		super()
 	}
-}
-
-export interface OrderSpec {
-	value: InlineValue
-	asc: boolean
-}
-
-export class OrderbyTransformation extends Transformation {
-	constructor(public orders: OrderSpec[]) {
-		super()
+	transform<T extends BaseLinqQSEntry>(
+		enumerable: LinqCollection<T>,
+		variables: string[]
+	): LinqCollection<T> {
+		const predicateFct = makeFunction<T, boolean>(this.predicate, variables)
+		return enumerable.where((itm: T) => predicateFct(itm))
 	}
 }
 
@@ -47,14 +68,51 @@ export class LetTransformation extends Transformation {
 	newVariables(already: string[]) {
 		return [...already, this.variable]
 	}
+	transform<T extends BaseLinqQSEntry, R extends BaseLinqEntry>(
+		enumerable: LinqCollection<T>,
+		variables: string[]
+	) {
+		const generateFct = makeFunction<T, R>(this.value, variables)
+		return enumerable.select<[...T, R]>((itm) => [...itm, generateFct(itm)])
+	}
+}
+
+export class SelectTransformation extends Transformation {
+	constructor(
+		public value: Hardcodable<Function>,
+		public into?: string | false
+	) {
+		super()
+	}
+
+	newVariables() {
+		return this.into ? [this.into] : []
+	}
+
+	transform<T extends BaseLinqQSEntry, R>(enumerable: LinqCollection<T>, variables: string[]) {
+		const generateFct = makeFunction<T, R>(this.value, variables)
+		return enumerable.select<[R]>((itm) => [generateFct(itm)])
+	}
+}
+
+export class OrderbyTransformation extends Transformation {
+	constructor(public orders: OrderSpec[]) {
+		super()
+	}
+
+	transform<T extends BaseLinqQSEntry>(enumerable: LinqCollection<T>, variables: string[]) {
+		return enumerable.order(
+			...this.orders.map(({ value, way }) => orderFunction(makeFunction(value, variables), way))
+		)
+	}
 }
 
 export class JoinTransformation<T = any> extends Transformation {
 	constructor(
 		public from: string,
-		public source: AsyncIterable<T>,
-		public valueA: InlineValue,
-		public valueB: InlineValue,
+		public source: any,
+		public outerSelector: Hardcodable<Function>,
+		public innerSelector: Hardcodable<Function>,
 		public into?: string
 	) {
 		super()
@@ -62,6 +120,29 @@ export class JoinTransformation<T = any> extends Transformation {
 	newVariables(already?: string[]) {
 		if (!already) throw new SemanticError(`${this.constructor.name} needs given already variables`)
 		return [...already, this.into || this.from]
+	}
+	transform<T extends BaseLinqQSEntry, I extends BaseLinqEntry>(
+		enumerable: LinqCollection<T>,
+		variables: string[],
+		collector: Collector
+	) {
+		const outerSelectorFct = makeFunction<T, Primitive>(this.outerSelector, variables),
+			innerSelectorFct = makeFunction<[I], Primitive>(this.innerSelector, [this.from]),
+			innerSelectorSingleFct = (i: I) => innerSelectorFct([i]),
+			source = collector<I>(this.source)
+		if (this.into)
+			return enumerable.groupJoin<I, [...T, I[]]>(
+				source,
+				outerSelectorFct,
+				innerSelectorSingleFct,
+				(outer: T, inner: I[]) => [...outer, inner]
+			)
+		return enumerable.join<I, [...T, I]>(
+			source,
+			outerSelectorFct,
+			innerSelectorSingleFct,
+			(outer: T, inner: I) => [...outer, inner]
+		)
 	}
 }
 
@@ -76,17 +157,13 @@ export class GroupTransformation extends Transformation {
 	newVariables() {
 		return this.into ? [this.into] : []
 	}
-}
-
-export class SelectTransformation extends Transformation {
-	constructor(
-		public value: Hardcodable<Function>,
-		public into?: string | false
+	transform<T extends BaseLinqQSEntry, R extends BaseLinqEntry>(
+		enumerable: LinqCollection<T>,
+		variables: string[]
 	) {
-		super()
-	}
-	newVariables() {
-		return this.into ? [this.into] : []
+		const generateFct = makeFunction<T, R>(this.value, variables),
+			keyFct = makeFunction<T, Primitive>(this.key, variables)
+		return enumerable.groupBy<R>(keyFct, generateFct)
 	}
 }
 
