@@ -1,6 +1,5 @@
-import memLinq from './src'
+import { default as from } from './src'
 import { allTests, type Student, type Course, type Registration } from '../../test'
-import { Group, LinqCollection } from '@linxjs/core'
 
 const students: Student[] = [
 	{ name: 'Mark', age: 22 },
@@ -35,21 +34,8 @@ const registrations: Registration[] = [
 	{ name: 'Alf', course: 'Math' }
 ]
 
-allTests(memLinq, students, courses, registrations)
+allTests(from, students, courses, registrations)
 
-/*const from = memLinq
 describe('debug', () => {
-	test('here', async () => {
-		const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-		const grouped = from<Group<number>>
-		expect(
-			await grouped`n in ${numbers} group n by n % 2`
-				.select(async (g: Group<number>) => [g.key, await g.toArray()])
-				.toArray()
-		).toEqual([
-			[0, [2, 4, 6, 8, 10]],
-			[1, [1, 3, 5, 7, 9]]
-		])
-	})
+	test('here', async () => {})
 })
-*/

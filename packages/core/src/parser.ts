@@ -43,7 +43,7 @@ const linqKeywords = [
 	'where',
 	'select',
 	'join',
-	'orderby',
+	'order',
 	'group',
 	'by',
 	'into',
@@ -228,7 +228,8 @@ export function parse(parts: TemplateStringsArray, ...args: any[]) {
 			case 'where':
 				transformations.push(new WhereTransformation(reader.nextValue()))
 				break
-			case 'orderby':
+			case 'order':
+				reader.expectRaw('by')
 				const specs: { [key: string]: 'asc' | 'desc' } = { ascending: 'asc', descending: 'desc' }
 				const orders: OrderSpec[] = []
 				do {

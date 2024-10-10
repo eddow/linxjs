@@ -30,15 +30,15 @@ export default function (from: Linq) {
 				{ n: 10, inc: 11 }
 			])
 		})
-		test('orderby', async () => {
+		test('order by', async () => {
 			const numbers = [1, 10, 2, 9, 3, 8, 4, 7, 5, 6]
-			expect(await from`n in ${numbers} orderby n`.toArray()).toEqual([
+			expect(await from`n in ${numbers} order by n`.toArray()).toEqual([
 				1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 			])
-			expect(await from`n in ${numbers} orderby -n ascending`.toArray()).toEqual([
+			expect(await from`n in ${numbers} order by -n ascending`.toArray()).toEqual([
 				10, 9, 8, 7, 6, 5, 4, 3, 2, 1
 			])
-			expect(await from`n in ${numbers} orderby n descending`.toArray()).toEqual([
+			expect(await from`n in ${numbers} order by n descending`.toArray()).toEqual([
 				10, 9, 8, 7, 6, 5, 4, 3, 2, 1
 			])
 		})
@@ -80,9 +80,8 @@ export default function (from: Linq) {
 
 		test('group by', async () => {
 			const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-			const grouped = from<Group<number>>
 			expect(
-				await grouped`n in ${numbers} group n by n % 2`
+				await from`n in ${numbers} group n by n % 2`
 					.select(async (g: Group<number>) => [g.key, await g.toArray()])
 					.toArray()
 			).toEqual([
@@ -90,7 +89,7 @@ export default function (from: Linq) {
 				[1, [1, 3, 5, 7, 9]]
 			])
 			expect(
-				await grouped`n in ${numbers} group by n % 2`
+				await from`n in ${numbers} group by n % 2`
 					.select(async (g: Group<number>) => [g.key, await g.toArray()])
 					.toArray()
 			).toEqual([
@@ -130,6 +129,15 @@ export default function (from: Linq) {
 			)
 			expect(async () => await from`n into ${[1, 2]}`.toArray()).rejects.toThrow(SyntaxError)
 			expect(async () => await from`join n in ${[1, 2]}`.toArray()).rejects.toThrow(SyntaxError)
+		})
+
+		test('aggregate', async () => {
+			const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+			expect(await from`n in ${numbers} where n <= 5`.count()).toEqual(5)
+			expect(await from`n in ${numbers} where n <= 5`.sum()).toEqual(15)
+			expect(await from`n in ${numbers} where n <= 5`.min()).toEqual(1)
+			expect(await from`n in ${numbers} where n <= 5`.max()).toEqual(5)
+			expect(await from`n in ${numbers} where n <= 5`.average()).toEqual(3)
 		})
 	})
 }

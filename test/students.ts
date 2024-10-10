@@ -17,8 +17,8 @@ export interface Registration {
 
 export default function (from: Linq, students: any, courses: any, registrations: any) {
 	describe('students', () => {
-		test('orderby', async () => {
-			expect(await from`s in ${students} orderby s.age, s.name select s.name`.toArray()).toEqual([
+		test('order by', async () => {
+			expect(await from`s in ${students} order by s.age, s.name select s.name`.toArray()).toEqual([
 				'Peter',
 				'Bob',
 				'Sara',
@@ -68,7 +68,7 @@ export default function (from: Linq, students: any, courses: any, registrations:
 				await from`s in ${students}
 				join r in ${registrations} on s.name equals r.name
 				join c in ${courses} on r.course equals c.name
-				orderby s.name, c.course
+				order by s.name, c.course
 				select { name: s.name, course: c.name, hours: c.hours }`.toArray()
 			).toEqual([
 				{ name: 'Bob', course: 'Geography', hours: 15 },
@@ -106,7 +106,7 @@ export default function (from: Linq, students: any, courses: any, registrations:
 				await from`s in ${students}
 				join r in ${registrations} on s.name equals r.name into courses
 				from c in courses
-				orderby s.name, c.course
+				order by s.name, c.course
 				select {name: s.name, course: c.course }`.toArray()
 			).toEqual([
 				{ name: 'Bob', course: 'Geography' },

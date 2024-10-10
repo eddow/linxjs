@@ -11,10 +11,10 @@ export interface OrderFunction<T> extends Comparable<T> {
 	asc: boolean
 }
 export function orderFunction<T>(
-	fct: Comparable<T>,
+	comparable: Comparable<T>,
 	way: 'asc' | 'desc' | boolean = 'asc'
 ): OrderFunction<T> {
-	return Object.assign(fct, { asc: ['asc', true].includes(way) })
+	return Object.assign(comparable, { asc: ['asc', true].includes(way) })
 }
 
 export abstract class LinqCollection<T extends BaseLinqEntry> implements AsyncIterable<T> {
@@ -25,7 +25,7 @@ export abstract class LinqCollection<T extends BaseLinqEntry> implements AsyncIt
 	abstract average(numeric?: Numeric<T>): Promise<number>
 	abstract min(comparable?: Comparable<T>): Promise<T>
 	abstract max(comparable?: Comparable<T>): Promise<T>
-	abstract aggregate<R>(seed: R, fct: (seed: R, item: T) => Promise<R>): Promise<R>
+	abstract aggregate<R>(seed: R, reducer: (seed: R, item: T) => Promise<R>): Promise<R>
 
 	abstract all(predicate: Predicate<T>): Promise<boolean>
 	abstract any(predicate: Predicate<T>): Promise<boolean>
@@ -137,8 +137,8 @@ export class OrderedLinqCollection<T extends BaseLinqEntry> extends LinqCollecti
 	max(comparable?: Comparable<T>): Promise<T> {
 		return this.source.max(comparable)
 	}
-	aggregate<R>(seed: R, fct: (seed: R, item: T) => Promise<R>): Promise<R> {
-		return this.ordered.aggregate(seed, fct)
+	aggregate<R>(seed: R, reducer: (seed: R, item: T) => Promise<R>): Promise<R> {
+		return this.ordered.aggregate(seed, reducer)
 	}
 	all(predicate: Predicate<T>): Promise<boolean> {
 		return this.source.all(predicate)

@@ -5,7 +5,7 @@ LINQ Query Syntax for javascript.
 ## What ?
 
 ```js
-linq`from s in ${students} orderby s.age descending, s.name select s.name`
+linq`from s in ${students} order by s.age descending, s.name select s.name`
 ```
 
 This was correct JS syntax and now has a meaningful value.

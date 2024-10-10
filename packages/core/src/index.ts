@@ -5,7 +5,7 @@ export * from './parser'
 export * from './transformations'
 export * from './internals'
 
-export type Linq = <T extends BaseLinqEntry>(
+export type Linq = <T extends BaseLinqEntry = BaseLinqEntry>(
 	parts: TemplateStringsArray,
 	...args: any[]
 ) => LinqCollection<T>

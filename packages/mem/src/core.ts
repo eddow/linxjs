@@ -9,12 +9,11 @@ import {
 	orderFunction,
 	Group,
 	keyedGroup,
-	BaseLinqQSEntry,
 	Selector,
 	Predicate
 } from '@linxjs/core'
 
-export function resolved<T extends any[], R>(
+function resolved<T extends any[], R>(
 	fct: (...args: T) => R | Promise<R>
 ): (...args: T) => Promise<R> {
 	return (...args: T) => {
@@ -48,7 +47,7 @@ class PromisedIterable<T> implements AsyncIterable<T> {
 	}
 }
 
-export async function toArray<T = any>(enumerable: AsyncIterable<T>): Promise<T[]> {
+async function toArray<T = any>(enumerable: AsyncIterable<T>): Promise<T[]> {
 	const rv = []
 	for await (const v of enumerable) rv.push(v)
 	return rv
@@ -218,8 +217,8 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		}
 		return rv[0]
 	}
-	async aggregate<R>(seed: R, fct: Selector<[R, T], R>): Promise<R> {
-		const promised = resolved(fct)
+	async aggregate<R>(seed: R, reducer: Selector<[R, T], R>): Promise<R> {
+		const promised = resolved(reducer)
 		let rv = seed
 		for await (const v of this.enumerable) rv = await promised(rv, v)
 		return rv
@@ -492,12 +491,6 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		)
 	}
 
-	/**
-	 * Groups the elements of the current sequence according to a specified key selector function.
-	 * @param keySelector A function to extract the key from each element of the current sequence.
-	 * @param elementSelector A function to select the elements from the current sequence (default is the identity function).
-	 * @returns A new sequence that contains the results of the group operation.
-	 */
 	groupBy<R extends BaseLinqEntry>(
 		keySelector: Comparable<T>,
 		elementSelector?: Selector<[T], R>
@@ -529,8 +522,6 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		})
 	}
 
-	//#region Query syntax interface (engine) AND reular interface
-
 	where(predicate: Predicate<T>): LinqCollection<T> {
 		const { enumerable } = this
 		return new MemCollection({
@@ -551,21 +542,31 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 			}
 		})
 	}
-	//TODO selectMany
 
-	//#endregion
-	//#region Query syntax interface (engine)
+	selectMany<R>(value: Selector<[T], AsyncIterable<R>>): LinqCollection<R> {
+		const { enumerable } = this,
+			promised = resolved(value)
+		return new MemCollection({
+			async *[Symbol.asyncIterator](): AsyncIterableIterator<R> {
+				for await (const v of enumerable) {
+					yield* await promised(v)
+				}
+			}
+		})
+	}
+
+	//#region Query syntax interface (engine) - not in C# linq
 
 	order(...orders: OrderFunction<T>[]): LinqCollection<T> {
 		const { enumerable } = this
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
 				yield* (await toArray(enumerable)).sort((a, b) => {
-					for (const fct of orders) {
-						const aVal = fct(a),
-							bVal = fct(b)
+					for (const order of orders) {
+						const aVal = order(a),
+							bVal = order(b)
 						if (aVal === bVal) continue
-						return aVal < bVal === fct.asc ? -1 : 1
+						return aVal < bVal === order.asc ? -1 : 1
 					}
 					return 0
 				})
