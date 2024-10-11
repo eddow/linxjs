@@ -1,119 +1,112 @@
+import type { LinqCollection } from './collection'
 import {
 	BaseLinqEntry,
 	BaseLinqQSEntry,
-	Collector,
-	Group,
-	LinqCollection,
-	makeFunction,
-	orderFunction,
-	Primitive,
-	SemanticError
-} from './internals'
-import type { OrderSpec, Hardcodable, InlineValue } from './parser'
+	Comparable,
+	InlineValue,
+	OrderSpec,
+	Predicate,
+	SemanticError,
+	Transmissible,
+	TransmissibleFunction
+} from './value'
 
-export abstract class Transformation {
+export abstract class Transformation<
+	T extends BaseLinqEntry = BaseLinqEntry,
+	R extends BaseLinqEntry = BaseLinqEntry
+> {
 	newVariables(already?: string[]): string[] {
 		if (!already) throw new SemanticError(`${this.constructor.name} needs given already variables`)
 		return <string[]>already
 	}
-	abstract transform(
-		enumerable: LinqCollection<any>,
-		variables: string[],
-		collector: Collector
-	): LinqCollection<any>
+	abstract transform(enumerable: LinqCollection<T>): LinqCollection<R>
 }
 
-export class FromTransformation<O extends BaseLinqEntry> extends Transformation {
+export class FromTransformation<
+	T extends BaseLinqEntry = BaseLinqEntry,
+	O extends BaseLinqEntry = BaseLinqEntry,
+	R extends BaseLinqQSEntry = BaseLinqQSEntry
+> extends Transformation<T, R> {
 	constructor(
 		public from: string,
-		public source: any
+		public source: TransmissibleFunction<LinqCollection<O>, [T]>
 	) {
 		super()
 	}
 	newVariables(already?: string[]) {
 		return already ? [...already, this.from] : [this.from]
 	}
-	transform<T extends BaseLinqQSEntry>(
-		enumerable: LinqCollection<T>,
-		variables: string[],
-		collector: Collector
-	): LinqCollection<[...T, O]> {
-		const otherFct = makeFunction<T, O>(this.source, variables)
-		return enumerable.multiplyBy<O, [...T, O]>(
-			(e) => collector<O>(otherFct(e)),
-			(t, o) => [...t, o]
-		)
+	transform(enumerable: LinqCollection<T>): LinqCollection<R> {
+		return enumerable.multiplyBy<O, R>(this.source, this.from)
 	}
 }
 
-export class WhereTransformation extends Transformation {
-	constructor(public predicate: InlineValue) {
+export class WhereTransformation<
+	T extends BaseLinqQSEntry = BaseLinqQSEntry
+> extends Transformation<T, T> {
+	constructor(public predicate: Predicate<T>) {
 		super()
 	}
-	transform<T extends BaseLinqQSEntry>(
-		enumerable: LinqCollection<T>,
-		variables: string[]
-	): LinqCollection<T> {
-		const predicateFct = makeFunction<T, boolean>(this.predicate, variables)
-		return enumerable.where((item: T) => predicateFct(item))
+	transform(enumerable: LinqCollection<T>): LinqCollection<T> {
+		return enumerable.where(this.predicate)
 	}
 }
 
-export class LetTransformation extends Transformation {
+export class LetTransformation<
+	T extends BaseLinqQSEntry = BaseLinqQSEntry,
+	O extends BaseLinqEntry = BaseLinqEntry,
+	R extends BaseLinqQSEntry = BaseLinqQSEntry
+> extends Transformation {
 	constructor(
 		public variable: string,
-		public value: InlineValue
+		public value: TransmissibleFunction<O, [T]>
 	) {
 		super()
 	}
 	newVariables(already: string[]) {
 		return [...already, this.variable]
 	}
-	transform<T extends BaseLinqQSEntry, R extends BaseLinqEntry>(
-		enumerable: LinqCollection<T>,
-		variables: string[]
-	) {
-		const generateFct = makeFunction<T, R>(this.value, variables)
-		return enumerable.select<[...T, R]>((item) => [...item, generateFct(item)])
+	transform(enumerable: LinqCollection<T>) {
+		return enumerable.let<O, R>(this.value, this.variable)
 	}
 }
 
-export class SelectTransformation extends Transformation {
+export class SelectTransformation<
+	T extends BaseLinqQSEntry,
+	R extends BaseLinqQSEntry
+> extends Transformation {
 	constructor(
-		public value: Hardcodable<Function>,
-		public into?: string | false
+		public value: TransmissibleFunction<R, [T]>,
+		public into: string = ''
 	) {
 		super()
 	}
 
-	newVariables() {
-		return this.into ? [this.into] : []
-	}
-
-	transform<T extends BaseLinqQSEntry, R>(enumerable: LinqCollection<T>, variables: string[]) {
-		const generateFct = makeFunction<T, R>(this.value, variables)
-		return enumerable.select<[R]>((item) => [generateFct(item)])
+	transform(enumerable: LinqCollection<T>) {
+		return enumerable.select<R>(this.value).wrap(this.into)
 	}
 }
 
-export class OrderbyTransformation extends Transformation {
+export class OrderbyTransformation<T extends BaseLinqQSEntry> extends Transformation {
 	constructor(public orders: OrderSpec[]) {
 		super()
 	}
 
-	transform<T extends BaseLinqQSEntry>(enumerable: LinqCollection<T>, variables: string[]) {
-		return enumerable.order(
-			...this.orders.map(({ value, way }) => orderFunction(makeFunction(value, variables), way))
-		)
+	transform(enumerable: LinqCollection<T>) {
+		return enumerable.order(...this.orders)
 	}
 }
 
-export class JoinTransformation<T = any> extends Transformation {
+export class JoinTransformation<
+	T extends BaseLinqQSEntry,
+	I extends BaseLinqEntry,
+	R extends BaseLinqQSEntry
+> extends Transformation {
 	constructor(
 		public from: string,
-		public source: any,
-		public outerSelector: Hardcodable<Function>,
-		public innerSelector: Hardcodable<Function>,
+		public source: Transmissible<LinqCollection<I>, [T]>,
+		public outerSelector: Comparable<T>,
+		public innerSelector: Comparable<I>,
 		public into?: string
 	) {
 		super()
@@ -122,49 +115,34 @@ export class JoinTransformation<T = any> extends Transformation {
 		if (!already) throw new SemanticError(`${this.constructor.name} needs given already variables`)
 		return [...already, this.into || this.from]
 	}
-	transform<T extends BaseLinqQSEntry, I extends BaseLinqEntry>(
-		enumerable: LinqCollection<T>,
-		variables: string[],
-		collector: Collector
-	) {
-		const outerSelectorFct = makeFunction<T, Primitive>(this.outerSelector, variables),
-			innerSelectorFct = makeFunction<[I], Primitive>(this.innerSelector, [this.from]),
-			innerSelectorSingleFct = (i: I) => innerSelectorFct([i]),
-			source = collector<I>(this.source)
+	transform(enumerable: LinqCollection<T>) {
 		if (this.into)
-			return enumerable.groupJoin<I, [...T, I[]]>(
-				source,
-				outerSelectorFct,
-				innerSelectorSingleFct,
-				(outer: T, inner: I[]) => [...outer, inner]
+			return enumerable.groupJoin<I, R>(
+				this.source,
+				this.outerSelector,
+				this.innerSelector,
+				this.into
 			)
-		return enumerable.join<I, [...T, I]>(
-			source,
-			outerSelectorFct,
-			innerSelectorSingleFct,
-			(outer: T, inner: I) => [...outer, inner]
-		)
+		return enumerable.join<I, R>(this.source, this.outerSelector, this.innerSelector, this.from)
 	}
 }
 
-export class GroupTransformation extends Transformation {
+export class GroupTransformation<
+	T extends BaseLinqQSEntry,
+	R extends BaseLinqQSEntry
+> extends Transformation {
 	constructor(
-		public value: Hardcodable<Function>,
-		public key: Hardcodable<Function>,
-		public into?: string | false
+		public value: TransmissibleFunction<R, [T]> | undefined,
+		public key: Comparable<T>,
+		public into: string = ''
 	) {
 		super()
 	}
 	newVariables() {
 		return this.into ? [this.into] : []
 	}
-	transform<T extends BaseLinqQSEntry, R extends BaseLinqEntry>(
-		enumerable: LinqCollection<T>,
-		variables: string[]
-	) {
-		const generateFct = makeFunction<T, R>(this.value, variables),
-			keyFct = makeFunction<T, Primitive>(this.key, variables)
-		return enumerable.groupBy<R>(keyFct, generateFct).select<[Group<R>]>((v) => [v])
+	transform(enumerable: LinqCollection<T>) {
+		return enumerable.groupBy<R>(this.key, this.value).wrap(this.into)
 	}
 }
 

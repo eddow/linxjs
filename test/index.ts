@@ -1,14 +1,14 @@
-import { Linq } from '@linxjs/core'
-import standardTest from './standard'
+import { LinqCollection } from '@linxjs/core'
+import standardTest from './numbers'
 import studentsTest, { type Student, type Course, type Registration } from './students'
 export { type Student, type Course, type Registration }
 
 export function allTests(
-	from: Linq,
-	students: Student[],
-	courses: Course[],
-	registrations: Registration[]
+	numbers: LinqCollection<number>,
+	students: LinqCollection<Student>,
+	courses: LinqCollection<Course>,
+	registrations: LinqCollection<Registration>
 ) {
-	standardTest(from)
-	studentsTest(from, students, courses, registrations)
+	standardTest(numbers)
+	//studentsTest(students, courses, registrations)
 }

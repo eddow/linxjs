@@ -1,0 +1,53 @@
+import knex from 'knex'
+import { sqlCollector } from './src'
+import { default as from } from '@linxjs/core'
+
+interface NumberEntry {
+	n: number
+}
+
+const db = knex({
+	client: 'sqlite3',
+	connection: {
+		filename: ':memory:' // Use :memory: for an in-memory database
+	},
+	useNullAsDefault: true // SQLite requires this for default values
+})
+
+beforeAll(async () => {
+	await db.schema.createTable('numbers', (table) => {
+		table.integer('n')
+	})
+	await db('numbers').insert([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({ n })))
+	const selectN = db('numbers').select('n'),
+		surselect = db.from(db.raw('(' + selectN.toQuery() + ')')).select('*'),
+		qr = surselect.toQuery(),
+		rv = await surselect
+	debugger
+})
+
+const numbers = sqlCollector<NumberEntry>(db('numbers')).select((number) => number.n)
+
+describe('sql', () => {
+	test('from', async () => {
+		expect(await from`n in ${numbers}`.toArray()).toEqual([
+			{ n: 1 },
+			{ n: 2 },
+			{ n: 3 },
+			{ n: 4 },
+			{ n: 5 },
+			{ n: 6 },
+			{ n: 7 },
+			{ n: 8 },
+			{ n: 9 },
+			{ n: 10 }
+		])
+	})
+	/*test('from', async () => {
+		const rv = await (<SqlCollection>from`n in ${numbers}`)
+			.raw(db, 'GROUP_CONCAT(n) as numbers')
+			.toArray()
+		debugger
+		expect(await from`n in ${numbers}`.count()).toEqual(10)
+	})*/
+})

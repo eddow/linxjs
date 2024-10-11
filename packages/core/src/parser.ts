@@ -1,3 +1,4 @@
+import { LinqCollection } from './collection'
 import {
 	FromTransformation,
 	GroupTransformation,
@@ -8,19 +9,15 @@ import {
 	Transformation,
 	WhereTransformation
 } from './transformations'
-
-export class InlineValue {
-	constructor(
-		public strings: string[] = [],
-		public args: any[] = []
-	) {}
-}
-
-export interface OrderSpec {
-	value: Hardcodable<Function>
-	way: 'asc' | 'desc'
-}
-export type Hardcodable<T = any> = T | InlineValue
+import {
+	BaseLinqEntry,
+	BaseLinqQSEntry,
+	InlineValue,
+	OrderSpec,
+	Primitive,
+	SemanticError,
+	TransmissibleFunction
+} from './value'
 
 export interface Parsed {
 	enumerable: any
@@ -149,13 +146,17 @@ export class TemplateStringsReader {
 	 * @param simple If true, the value is parsed without commas. Defaults to false.
 	 * @returns The parsed InlineValue.
 	 */
-	nextValue<T = any>(type?: 'simple' | 'external'): Hardcodable<T> {
+	nextValue<T>(variables: string[], type?: 'simple' | 'external'): TransmissibleFunction<T> {
 		this.trim()
 		let next = this.parts[this.part].substring(this.posInPart)
 		if (!next.trim()) {
 			// direct ${...} value
 			this.posInPart = 0
-			return this.args[this.part++]
+			const value = this.args[this.part++]
+			return new TransmissibleFunction<T>(
+				typeof value === 'function' ? value : new InlineValue([value]),
+				variables
+			)
 		}
 		let parsable = new InlineValue(),
 			nextRead
@@ -176,7 +177,7 @@ export class TemplateStringsReader {
 				this.posInPart += nextRead[1].length
 			}
 		} while (!this.ended() && !nextRead)
-		return parsable
+		return new TransmissibleFunction<T>(parsable, variables)
 	}
 
 	isWord<W extends string>(...words: W[]): W | false {
@@ -207,77 +208,72 @@ export class TemplateStringsReader {
 }
 
 export function parse(parts: TemplateStringsArray, ...args: any[]) {
+	let variables: string[] = []
 	const reader = new TemplateStringsReader(
-		parts.map((p) => p.replace(/\n|\r/g, ' ')), //cr & lf always screw up regex-es
-		args
-	)
-	const transformations: Transformation[] = [],
-		rv = {
-			from: reader.nextWord(),
-			source: reader.expect('in') && reader.nextValue(),
-			transformations
-		}
+			parts.map((p) => p.replace(/\n|\r/g, ' ')), //cr & lf always screw up regex-es
+			args
+		),
+		transformations: Transformation[] = [],
+		from = reader.nextWord(),
+		source = reader.expect('in') && reader.nextValue<LinqCollection>(variables)
+	if (!(source.constant instanceof LinqCollection))
+		throw new SemanticError('Expecting a constant LinqCollection source')
+	variables = [...variables, from]
+	const rv = { from, source: source.constant, transformations }
 	while (!reader.ended()) {
-		const transformation = reader.nextWord()
-		switch (transformation) {
-			case 'from':
-				transformations.push(
-					new FromTransformation(reader.nextWord(), reader.expect('in') && reader.nextValue())
-				)
-				break
-			case 'where':
-				transformations.push(new WhereTransformation(reader.nextValue()))
-				break
-			case 'order':
-				reader.expectRaw('by')
-				const specs: { [key: string]: 'asc' | 'desc' } = { ascending: 'asc', descending: 'desc' }
-				const orders: OrderSpec[] = []
-				do {
-					const order = reader.nextValue('simple'),
-						ascSpec = reader.isWord('ascending', 'descending'),
-						ascIsSpec = ascSpec && ascSpec in specs
-					orders.push({ value: order, way: ascIsSpec ? specs[ascSpec] : 'asc' })
-				} while (reader.isRaw(','))
-				transformations.push(new OrderbyTransformation(orders))
-				break
-			case 'let':
-				const variable = reader.nextWord()
-				reader.expectRaw('=')
-				const value = reader.nextValue()
-				transformations.push(new LetTransformation(variable, value))
-				break
-			case 'join':
-				transformations.push(
-					new JoinTransformation(
+		const transformationName = reader.nextWord(),
+			createTransformation = {
+				from: () =>
+					new FromTransformation(
 						reader.nextWord(),
-						reader.expect('in') && reader.nextValue('external'),
-						reader.expect('on') && reader.nextValue(),
-						reader.expect('equals') && reader.nextValue(),
+						reader.expect('in') && reader.nextValue<LinqCollection>(variables)
+					),
+				where: () => new WhereTransformation(reader.nextValue(variables)),
+				order: () => {
+					reader.expectRaw('by')
+					const specs: { [key: string]: 'asc' | 'desc' } = { ascending: 'asc', descending: 'desc' }
+					const orders: OrderSpec[] = []
+					do {
+						const order = reader.nextValue<Primitive>(variables, 'simple'),
+							ascSpec = reader.isWord('ascending', 'descending'),
+							ascIsSpec = ascSpec && ascSpec in specs
+						orders.push({ by: order, way: ascIsSpec ? specs[ascSpec] : 'asc' })
+					} while (reader.isRaw(','))
+					return new OrderbyTransformation(orders)
+				},
+
+				let: () =>
+					new LetTransformation(
+						reader.nextWord(),
+						reader.expectRaw('=') && reader.nextValue(variables)
+					),
+				join: () => {
+					const variable = reader.nextWord()
+					return new JoinTransformation(
+						variable,
+						reader.expect('in') && reader.nextValue<LinqCollection>(variables, 'external'),
+						reader.expect('on') && reader.nextValue(variables),
+						reader.expect('equals') && reader.nextValue([variable]),
 						reader.isWord('into') ? reader.nextWord() : undefined
 					)
-				)
-				break
-			case 'group':
-				transformations.push(
+				},
+				group: () =>
 					new GroupTransformation(
-						reader.peekWord() === 'by' ? (x: any) => x : reader.nextValue(),
-						reader.expect('by') && reader.nextValue(),
+						reader.peekWord() === 'by' ? undefined : reader.nextValue<BaseLinqEntry>(variables),
+						reader.expect('by') && reader.nextValue(variables),
+						reader.isWord('into') && reader.nextWord()
+					),
+				select: () =>
+					new SelectTransformation(
+						reader.nextValue<BaseLinqQSEntry>(variables),
 						reader.isWord('into') && reader.nextWord()
 					)
-				)
-				break
-			case 'select':
-				transformations.push(
-					new SelectTransformation(
-						reader.nextValue(),
-						reader.isWord('into') ? reader.nextWord() : undefined
-					)
-				)
-				if (!reader.ended()) throw new SyntaxError(reader, 'Expecting `select` to finish the query')
-				break
-			default:
-				throw new SyntaxError(reader, 'Expecting linq set transformation')
-		}
+			}[transformationName]
+		if (!createTransformation)
+			throw new SyntaxError(reader, `Unknown transformation: ${transformationName}`)
+		const transformation = createTransformation()
+		variables = transformation.newVariables(variables)
+		rv.transformations.push(transformation)
 	}
 	return rv
 }

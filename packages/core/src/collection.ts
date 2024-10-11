@@ -1,34 +1,33 @@
-import { InlineValue } from './parser'
+import {
+	BaseLinqEntry,
+	BaseLinqQSEntry,
+	Comparable,
+	Group,
+	Numeric,
+	OrderSpec,
+	Predicate,
+	Primitive,
+	Transmissible
+} from './value'
 
-export type BaseLinqEntry = any
-export type BaseLinqQSEntry<T extends BaseLinqEntry = BaseLinqEntry> = T[]
-export type Primitive = string | number | boolean
-export type Selector<T extends any[], R> = (...args: T) => Promise<R> | R
-export type Numeric<T> = Selector<[T], number>
-export type Comparable<T> = Selector<[T], Primitive>
-export type Predicate<T> = Selector<[T], boolean>
-export interface OrderFunction<T> extends Comparable<T> {
-	asc: boolean
-}
-export function orderFunction<T>(
-	comparable: Comparable<T>,
-	way: 'asc' | 'desc' | boolean = 'asc'
-): OrderFunction<T> {
-	return Object.assign(comparable, { asc: ['asc', true].includes(way) })
-}
+export type List<T extends BaseLinqEntry> = LinqCollection<T> | AsyncIterable<T> | Iterable<T>
 
-export abstract class LinqCollection<T extends BaseLinqEntry> implements AsyncIterable<T> {
+export abstract class LinqCollection<T extends BaseLinqEntry = BaseLinqEntry>
+	implements AsyncIterable<T>
+{
 	abstract [Symbol.asyncIterator](): AsyncIterator<T, any, any>
+	abstract toArray(): Promise<T[]>
+	//#region Retrieve one value from collection
 
-	abstract count(predicate?: Predicate<T>): Promise<number>
+	abstract count(comparable?: Comparable<T>): Promise<number>
 	abstract sum(numeric?: Numeric<T>): Promise<number>
 	abstract average(numeric?: Numeric<T>): Promise<number>
 	abstract min(comparable?: Comparable<T>): Promise<T>
 	abstract max(comparable?: Comparable<T>): Promise<T>
-	abstract aggregate<R>(seed: R, reducer: (seed: R, item: T) => Promise<R>): Promise<R>
+	abstract aggregate<R>(seed: R, reducer: Transmissible<R, [R, T]>): Promise<R>
 
 	abstract all(predicate: Predicate<T>): Promise<boolean>
-	abstract any(predicate: Predicate<T>): Promise<boolean>
+	abstract any(predicate?: Predicate<T>): Promise<boolean>
 
 	abstract contains(item: T): Promise<boolean>
 
@@ -38,6 +37,10 @@ export abstract class LinqCollection<T extends BaseLinqEntry> implements AsyncIt
 	abstract lastOrDefault(predicate?: Predicate<T>, defaultValue?: T): Promise<T>
 	abstract single(predicate?: Predicate<T>): Promise<T>
 	abstract singleOrDefault(predicate?: Predicate<T>, defaultValue?: T): Promise<T>
+
+	//#endregion
+	//#region Pagination
+
 	abstract take(n: number): LinqCollection<T>
 	abstract takeWhile(predicate: Predicate<T>): LinqCollection<T>
 	abstract takeLast(n: number): LinqCollection<T>
@@ -45,19 +48,22 @@ export abstract class LinqCollection<T extends BaseLinqEntry> implements AsyncIt
 	abstract skip(n: number): LinqCollection<T>
 	abstract skipWhile(predicate: Predicate<T>): LinqCollection<T>
 
+	//#endregion
+	//#region Transformations
+
 	abstract defaultIfEmpty(defaultValue?: T): LinqCollection<T>
-	abstract distinct(comparer?: (itemA: T, itemB: T) => boolean): LinqCollection<T>
+	abstract distinct(comparer?: Transmissible<boolean, [T, T]>): LinqCollection<T>
 	abstract distinctBy(by: Comparable<T>): LinqCollection<T>
 
 	abstract append(...items: T[]): LinqCollection<T>
 	abstract prepend(...items: T[]): LinqCollection<T>
-	abstract union(other: AsyncIterable<T>): LinqCollection<T>
-	abstract concat(other: AsyncIterable<T>): LinqCollection<T>
-	abstract intersect(other: AsyncIterable<T>): LinqCollection<T>
-	abstract except(other: AsyncIterable<T>): LinqCollection<T>
-	abstract multiplyBy<O extends BaseLinqEntry, R extends BaseLinqEntry>(
-		other: AsyncIterable<O> | ((item: T) => AsyncIterable<O>),
-		selector: Selector<[T, O], R>
+	abstract union(other: Transmissible<List<T>, [T]>): LinqCollection<T>
+	abstract concat(other: Transmissible<List<T>, [T]>): LinqCollection<T>
+	abstract intersect(other: Transmissible<List<T>, [T]>): LinqCollection<T>
+	abstract except(other: Transmissible<List<T>, [T]>): LinqCollection<T>
+	abstract multiplyBy<O extends BaseLinqEntry, R extends BaseLinqQSEntry>(
+		other: Transmissible<List<O>, [T]>,
+		resultSelector: Transmissible<R, [T, O]> | string
 	): LinqCollection<R>
 
 	/**
@@ -68,11 +74,11 @@ export abstract class LinqCollection<T extends BaseLinqEntry> implements AsyncIt
 	 * @param resultSelector A function to create a result element from an element from the current sequence and a sequence of elements from the inner sequence.
 	 * @returns A new sequence that contains the results of the join operation.
 	 */
-	abstract join<I extends BaseLinqEntry, R extends BaseLinqEntry>(
-		inner: AsyncIterable<I>,
+	abstract join<I extends BaseLinqEntry, R extends BaseLinqQSEntry>(
+		inner: Transmissible<List<I>, [T]>,
 		outerKeySelector: Comparable<T>,
 		innerKeySelector: Comparable<I>,
-		resultSelector: (outer: T, inner: I) => R
+		resultSelector: Transmissible<R, [T, I]> | string
 	): LinqCollection<R>
 
 	/**
@@ -83,11 +89,11 @@ export abstract class LinqCollection<T extends BaseLinqEntry> implements AsyncIt
 	 * @param resultSelector A function to create a result element from an element from the current sequence and a sequence of elements from the inner sequence.
 	 * @returns A new sequence that contains the results of the join operation.
 	 */
-	abstract groupJoin<I extends BaseLinqEntry, R extends BaseLinqEntry>(
-		inner: AsyncIterable<I>,
+	abstract groupJoin<I extends BaseLinqEntry, R extends BaseLinqQSEntry>(
+		inner: Transmissible<List<I>, [T]>,
 		outerKeySelector: Comparable<T>,
 		innerKeySelector: Comparable<I>,
-		resultSelector: (outer: T, inner: I[]) => R
+		resultSelector: Transmissible<R, [T, I[]]> | string
 	): LinqCollection<R>
 
 	/**
@@ -98,29 +104,54 @@ export abstract class LinqCollection<T extends BaseLinqEntry> implements AsyncIt
 	 */
 	abstract groupBy<R extends BaseLinqEntry>(
 		keySelector: Comparable<T>,
-		elementSelector?: Selector<[T], R>
+		elementSelector?: Transmissible<R, [T]>
 	): LinqCollection<Group<R>>
 
-	abstract toArray(): Promise<T[]>
+	//#endregion
 
 	abstract where(predicate: Predicate<T>): LinqCollection<T>
-	abstract select<R>(value: Selector<[T], R>): LinqCollection<R>
+	abstract select<R extends BaseLinqQSEntry>(value: Transmissible<R, [T]>): LinqCollection<R>
 
 	orderBy(by: Comparable<T>): OrderedLinqCollection<T> {
-		return new OrderedLinqCollection(this, [orderFunction(by, 'asc')])
+		return new OrderedLinqCollection(this, [{ by, way: 'asc' }])
 	}
 	orderByDescending(by: Comparable<T>): OrderedLinqCollection<T> {
-		return new OrderedLinqCollection(this, [orderFunction(by, 'desc')])
+		return new OrderedLinqCollection(this, [{ by, way: 'desc' }])
 	}
 
-	abstract order(...orders: OrderFunction<T>[]): LinqCollection<T>
-}
+	//#endregion
+	//#region Not in linq spec, internal usage
 
-export interface LinqCollectionWithStatics<T extends BaseLinqEntry> {
-	new (): LinqCollection<T>
+	abstract let<O extends BaseLinqEntry, R extends BaseLinqQSEntry>(
+		value: Transmissible<O, [T]>,
+		variable: string
+	): LinqCollection<R>
+	abstract order(...orders: OrderSpec<T>[]): LinqCollection<T>
+	abstract wrap<R extends BaseLinqQSEntry>(name?: string): LinqCollection<R>
+	abstract unwrap<R extends BaseLinqEntry>(): LinqCollection<R>
+
+	//#endregion
 }
 
 export class OrderedLinqCollection<T extends BaseLinqEntry> extends LinqCollection<T> {
+	constructor(
+		private readonly source: LinqCollection<T>,
+		private readonly orders: OrderSpec<T>[]
+	) {
+		super()
+	}
+
+	private get ordered() {
+		return this.source.order(...this.orders)
+	}
+
+	thenBy(by: Comparable<T>): OrderedLinqCollection<T> {
+		return new OrderedLinqCollection(this.source, [...this.orders, { by, way: 'asc' }])
+	}
+	thenByDescending(by: Comparable<T>): OrderedLinqCollection<T> {
+		return new OrderedLinqCollection(this.source, [...this.orders, { by, way: 'desc' }])
+	}
+
 	//#region Forward to source/ordered
 	count(predicate?: Predicate<T>): Promise<number> {
 		return this.source.count(predicate)
@@ -137,13 +168,13 @@ export class OrderedLinqCollection<T extends BaseLinqEntry> extends LinqCollecti
 	max(comparable?: Comparable<T>): Promise<T> {
 		return this.source.max(comparable)
 	}
-	aggregate<R>(seed: R, reducer: (seed: R, item: T) => Promise<R>): Promise<R> {
+	aggregate<R>(seed: R, reducer: Transmissible<R, [R, T]>): Promise<R> {
 		return this.ordered.aggregate(seed, reducer)
 	}
 	all(predicate: Predicate<T>): Promise<boolean> {
 		return this.source.all(predicate)
 	}
-	any(predicate: Predicate<T>): Promise<boolean> {
+	any(predicate?: Predicate<T>): Promise<boolean> {
 		return this.source.any(predicate)
 	}
 	contains(item: T): Promise<boolean> {
@@ -188,10 +219,10 @@ export class OrderedLinqCollection<T extends BaseLinqEntry> extends LinqCollecti
 	defaultIfEmpty(defaultValue?: T): LinqCollection<T> {
 		return this.ordered.defaultIfEmpty(defaultValue)
 	}
-	distinct(comparer?: (itemA: T, itemB: T) => boolean): LinqCollection<T> {
+	distinct(comparer?: Transmissible<boolean, [T, T]>): LinqCollection<T> {
 		return this.ordered.distinct(comparer)
 	}
-	distinctBy(by: (item: T) => any): LinqCollection<T> {
+	distinctBy(by: Comparable<T>): LinqCollection<T> {
 		return this.ordered.distinctBy(by)
 	}
 	append(...items: T[]): LinqCollection<T> {
@@ -200,43 +231,43 @@ export class OrderedLinqCollection<T extends BaseLinqEntry> extends LinqCollecti
 	prepend(...items: T[]): LinqCollection<T> {
 		return this.ordered.prepend(...items)
 	}
-	union(other: AsyncIterable<T>): LinqCollection<T> {
+	union(other: Transmissible<List<T>, [T]>): LinqCollection<T> {
 		return this.ordered.union(other)
 	}
-	concat(other: AsyncIterable<T>): LinqCollection<T> {
+	concat(other: Transmissible<List<T>, [T]>): LinqCollection<T> {
 		return this.ordered.concat(other)
 	}
-	intersect(other: AsyncIterable<T>): LinqCollection<T> {
+	intersect(other: Transmissible<List<T>, [T]>): LinqCollection<T> {
 		return this.ordered.intersect(other)
 	}
-	except(other: AsyncIterable<T>): LinqCollection<T> {
+	except(other: Transmissible<List<T>, [T]>): LinqCollection<T> {
 		return this.ordered.except(other)
 	}
-	multiplyBy<O extends BaseLinqEntry, R extends BaseLinqEntry>(
-		other: AsyncIterable<O> | ((item: T) => AsyncIterable<O>),
-		selector: Selector<[T, O], R>
+	multiplyBy<O extends BaseLinqEntry, R extends BaseLinqQSEntry>(
+		other: Transmissible<List<O>, [T]>,
+		resultSelector: Transmissible<R, [T, O]> | string
 	): LinqCollection<R> {
-		return this.ordered.multiplyBy(other, selector)
+		return this.ordered.multiplyBy(other, resultSelector)
 	}
-	join<I extends BaseLinqEntry, R extends BaseLinqEntry>(
-		inner: AsyncIterable<I>,
+	join<I extends BaseLinqEntry, R extends BaseLinqQSEntry>(
+		inner: Transmissible<List<I>, [T]>,
 		outerKeySelector: Comparable<T>,
 		innerKeySelector: Comparable<I>,
-		resultSelector: (outer: T, inner: I) => R
+		resultSelector: Transmissible<R, [T, I]> | string
 	): LinqCollection<R> {
 		return this.source.join(inner, outerKeySelector, innerKeySelector, resultSelector)
 	}
-	groupJoin<I extends BaseLinqEntry, R extends BaseLinqEntry>(
-		inner: AsyncIterable<I>,
+	groupJoin<I extends BaseLinqEntry, R extends BaseLinqQSEntry>(
+		inner: Transmissible<List<I>, [T]>,
 		outerKeySelector: Comparable<T>,
 		innerKeySelector: Comparable<I>,
-		resultSelector: (outer: T, inner: I[]) => R
+		resultSelector: Transmissible<R, [T, I[]]> | string
 	): LinqCollection<R> {
 		return this.source.groupJoin(inner, outerKeySelector, innerKeySelector, resultSelector)
 	}
 	groupBy<R extends BaseLinqEntry>(
 		keySelector: Comparable<T>,
-		elementSelector?: Selector<[T], R>
+		elementSelector?: Transmissible<R, [T]>
 	): LinqCollection<Group<R>> {
 		return this.source.groupBy(keySelector, elementSelector)
 	}
@@ -246,107 +277,29 @@ export class OrderedLinqCollection<T extends BaseLinqEntry> extends LinqCollecti
 	where(predicate: Predicate<T>): LinqCollection<T> {
 		return this.ordered.where(predicate)
 	}
-	select<R>(value: (item: T) => Promise<R>): LinqCollection<R> {
+	select<R extends BaseLinqQSEntry>(value: Transmissible<R, [T]>): LinqCollection<R> {
 		return this.ordered.select(value)
 	}
-	order(...orders: OrderFunction<T>[]): LinqCollection<T> {
+	let<O extends BaseLinqEntry, R extends BaseLinqQSEntry>(
+		value: Transmissible<O, [T]>,
+		variable: string
+	): LinqCollection<R> {
+		return this.ordered.let<O, R>(value, variable)
+	}
+	order(...orders: OrderSpec<T>[]): LinqCollection<T> {
 		return new OrderedLinqCollection(this.source, [...orders, ...this.orders])
+	}
+
+	wrap<R extends BaseLinqQSEntry>(name?: string): LinqCollection<R> {
+		return this.ordered.wrap(name)
+	}
+
+	unwrap<R extends BaseLinqEntry>(): LinqCollection<R> {
+		return this.ordered.unwrap()
 	}
 	[Symbol.asyncIterator](): AsyncIterator<T, any, any> {
 		return this.ordered[Symbol.asyncIterator]()
 	}
 
 	//#endregion
-	constructor(
-		private readonly source: LinqCollection<T>,
-		private readonly orders: OrderFunction<T>[]
-	) {
-		super()
-	}
-
-	private get ordered() {
-		return this.source.order(...this.orders)
-	}
-
-	thenBy(by: OrderFunction<T>): OrderedLinqCollection<T> {
-		return new OrderedLinqCollection(this.source, [...this.orders, orderFunction(by, 'asc')])
-	}
-	thenByDescending(by: OrderFunction<T>): OrderedLinqCollection<T> {
-		return new OrderedLinqCollection(this.source, [...this.orders, orderFunction(by, 'desc')])
-	}
-}
-
-export class SemanticError extends Error {
-	constructor(code: string, parent?: Error) {
-		super(`Unparsable code: ${code}`)
-	}
-}
-
-export interface Group<T extends BaseLinqEntry> extends LinqCollection<T> {
-	key: Primitive
-}
-
-export interface TransmissibleFunction<T extends BaseLinqEntry, R> {
-	(param: T): R
-	jsCode: string
-	values?: any[]
-}
-
-export function keyedGroup<T extends BaseLinqEntry>(
-	key: Primitive,
-	value: LinqCollection<T>
-): Group<T> {
-	return Object.assign(value, { key })
-}
-
-function transmissibleFunction<T extends BaseLinqEntry, R>(
-	fct: (parms: T) => R,
-	jsCode: string,
-	values?: any[]
-): TransmissibleFunction<T, R> {
-	return Object.assign(fct, values ? { jsCode, values } : { jsCode })
-}
-
-export const linxArgName = '$args$linx$',
-	linxArguments = new RegExp(`${linxArgName.replace(/\$/g, '\\$')}\\[(\\d+)\\]`, 'g')
-
-export type Collector = <T extends BaseLinqEntry>(source: any) => LinqCollection<T>
-/*
-export type Collector = <T extends BaseLinqEntry, M extends BaseLinqQSEntry = []>(
-	source: any,
-	factor?: LinqCollection<M>
-) => LinqCollection<[...M, T]>*/
-
-export function makeFunction<T extends BaseLinqQSEntry, R>(
-	iv: any,
-	variables: string[]
-): TransmissibleFunction<T, R> {
-	if (typeof iv === 'function')
-		return transmissibleFunction((args: any[]) => iv(...args), iv.toString())
-	if (iv instanceof InlineValue) {
-		console.assert([iv.args.length, iv.args.length + 1].includes(iv.strings.length))
-		if (iv.args.length) {
-			const ivStrings = [...iv.strings],
-				[strings, last] =
-					iv.strings.length > iv.args.length ? [ivStrings, ivStrings.pop()] : [ivStrings, ''],
-				fctCode = strings.map((s, i) => `${s} ${linxArgName}[${i}]`).join('') + last,
-				fct = new Function([linxArgName, ...variables].join(','), 'return ' + fctCode)
-			return transmissibleFunction(
-				(args: any[]) =>
-					fct(
-						iv.args.map((iva) => (typeof iva === 'function' ? iva(...args) : iva)),
-						...args
-					),
-				`(${variables.join(',')}) => ${fctCode}`,
-				iv.args
-			)
-		}
-		const value = iv.strings[0],
-			fct = new Function(variables.join(','), `return ${value}`)
-		return transmissibleFunction(
-			(args: any[]) => fct(...args),
-			`(${variables.join(',')}) => ${value}`
-		)
-	}
-	return transmissibleFunction(() => <R>iv, null)
 }
