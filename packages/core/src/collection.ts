@@ -78,7 +78,8 @@ export abstract class LinqCollection<T extends BaseLinqEntry = BaseLinqEntry>
 		inner: Transmissible<List<I>, [T]>,
 		outerKeySelector: Comparable<T>,
 		innerKeySelector: Comparable<I>,
-		resultSelector: Transmissible<R, [T, I]> | string
+		resultSelector: Transmissible<R, [T, I]> | string,
+		innerVariable?: string
 	): LinqCollection<R>
 
 	/**
@@ -93,7 +94,8 @@ export abstract class LinqCollection<T extends BaseLinqEntry = BaseLinqEntry>
 		inner: Transmissible<List<I>, [T]>,
 		outerKeySelector: Comparable<T>,
 		innerKeySelector: Comparable<I>,
-		resultSelector: Transmissible<R, [T, I[]]> | string
+		resultSelector: Transmissible<R, [T, I[]]> | string,
+		innerVariable?: string
 	): LinqCollection<R>
 
 	/**
@@ -253,17 +255,31 @@ export class OrderedLinqCollection<T extends BaseLinqEntry> extends LinqCollecti
 		inner: Transmissible<List<I>, [T]>,
 		outerKeySelector: Comparable<T>,
 		innerKeySelector: Comparable<I>,
-		resultSelector: Transmissible<R, [T, I]> | string
+		resultSelector: Transmissible<R, [T, I]> | string,
+		innerVariable?: string
 	): LinqCollection<R> {
-		return this.source.join(inner, outerKeySelector, innerKeySelector, resultSelector)
+		return this.source.join(
+			inner,
+			outerKeySelector,
+			innerKeySelector,
+			resultSelector,
+			innerVariable
+		)
 	}
 	groupJoin<I extends BaseLinqEntry, R extends BaseLinqQSEntry>(
 		inner: Transmissible<List<I>, [T]>,
 		outerKeySelector: Comparable<T>,
 		innerKeySelector: Comparable<I>,
-		resultSelector: Transmissible<R, [T, I[]]> | string
+		resultSelector: Transmissible<R, [T, I[]]> | string,
+		innerVariable?: string
 	): LinqCollection<R> {
-		return this.source.groupJoin(inner, outerKeySelector, innerKeySelector, resultSelector)
+		return this.source.groupJoin(
+			inner,
+			outerKeySelector,
+			innerKeySelector,
+			resultSelector,
+			innerVariable
+		)
 	}
 	groupBy<R extends BaseLinqEntry>(
 		keySelector: Comparable<T>,

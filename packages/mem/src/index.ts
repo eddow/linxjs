@@ -161,16 +161,27 @@ function join<T extends BaseLinqEntry, I extends BaseLinqEntry, R extends BaseLi
 	inner: AsyncIterable<I>,
 	outerKeySelector: Comparable<T>,
 	innerKeySelector: Comparable<I>,
-	resultSelector: (outer: T, inner: I[]) => AsyncIterable<R>
+	resultSelector: (outer: T, inner: I[]) => AsyncIterable<R>,
+	innerVariable?: string
 ): MemCollection<R> {
 	const fOuterKS = f(outerKeySelector),
 		fInnerKS = f(innerKeySelector)
+	function innerWrap(innerCollection: LinqCollection) {
+		return <LinqCollection<I>>(
+			(innerVariable ? innerCollection.wrap(innerVariable) : innerCollection)
+		)
+	}
+	function innerUnwrap(innerEntries: I[]) {
+		return innerVariable
+			? innerEntries.map((i) => (<MemCollectionEntry>i)[innerVariable])
+			: innerEntries
+	}
 	return new MemCollection({
 		async *[Symbol.asyncIterator](): AsyncIterableIterator<R> {
 			const outerIterator = memCollection(outer)
 					.order({ by: outerKeySelector, way: 'asc' })
 					[Symbol.asyncIterator](),
-				innerIterator = memCollection(constant(inner))
+				innerIterator = innerWrap(memCollection(constant(inner)))
 					.order({ by: innerKeySelector, way: 'asc' })
 					[Symbol.asyncIterator]()
 			let [outerIteratorResult, innerIteratorResult] = await Promise.all([
@@ -179,18 +190,18 @@ function join<T extends BaseLinqEntry, I extends BaseLinqEntry, R extends BaseLi
 			])
 			if (outerIteratorResult.done) return
 			if (!innerIteratorResult.done) {
-				let [outerKey, innerKey] = [
+				let [outerKey, innerKey] = await Promise.all([
 					fOuterKS(outerIteratorResult.value),
 					fInnerKS(innerIteratorResult.value)
-				]
+				])
 				do {
 					if (outerKey < innerKey) {
 						yield* resultSelector(outerIteratorResult.value, [])
 						outerIteratorResult = await outerIterator.next()
-						if (!outerIteratorResult.done) outerKey = fOuterKS(outerIteratorResult.value)
+						if (!outerIteratorResult.done) outerKey = await fOuterKS(outerIteratorResult.value)
 					} else if (outerKey > innerKey) {
 						innerIteratorResult = await innerIterator.next()
-						if (!innerIteratorResult.done) innerKey = fInnerKS(innerIteratorResult.value)
+						if (!innerIteratorResult.done) innerKey = await fInnerKS(innerIteratorResult.value)
 					} else {
 						const key = outerKey,
 							outerEntries = [],
@@ -198,14 +209,14 @@ function join<T extends BaseLinqEntry, I extends BaseLinqEntry, R extends BaseLi
 						do {
 							outerEntries.push(outerIteratorResult.value)
 							outerIteratorResult = await outerIterator.next()
-							if (!outerIteratorResult.done) outerKey = fOuterKS(outerIteratorResult.value)
+							if (!outerIteratorResult.done) outerKey = await fOuterKS(outerIteratorResult.value)
 						} while (!outerIteratorResult.done && outerKey === key)
 						do {
 							innerEntries.push(innerIteratorResult.value)
 							innerIteratorResult = await innerIterator.next()
-							if (!innerIteratorResult.done) innerKey = fInnerKS(innerIteratorResult.value)
+							if (!innerIteratorResult.done) innerKey = await fInnerKS(innerIteratorResult.value)
 						} while (!innerIteratorResult.done && innerKey === key)
-						for (const o of outerEntries) yield* resultSelector(o, innerEntries)
+						for (const o of outerEntries) yield* resultSelector(o, innerUnwrap(innerEntries))
 					}
 				} while (!outerIteratorResult.done && !innerIteratorResult.done)
 			}
@@ -546,7 +557,8 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		inner: AsyncIterable<I>,
 		outerKeySelector: Comparable<T>,
 		innerKeySelector: Comparable<I>,
-		resultSelector: Transmissible<R, [T, I]> | string
+		resultSelector: Transmissible<R, [T, I]> | string,
+		innerVariable?: string
 	): LinqCollection<R> {
 		const selector = concatResultSelector(resultSelector)
 		return join<T, I, R>(
@@ -556,7 +568,8 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 			innerKeySelector,
 			async function* (outer: T, inner: I[]) {
 				for (const i of inner) yield await Promise.resolve(selector(outer, i))
-			}
+			},
+			innerVariable
 		)
 	}
 
@@ -564,7 +577,8 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		inner: AsyncIterable<I>,
 		outerKeySelector: Comparable<T>,
 		innerKeySelector: Comparable<I>,
-		resultSelector: Transmissible<R, [T, I[]]> | string
+		resultSelector: Transmissible<R, [T, I[]]> | string,
+		innerVariable?: string
 	): LinqCollection<R> {
 		const selector = concatResultSelector(resultSelector)
 		return join(
@@ -574,7 +588,8 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 			innerKeySelector,
 			async function* (outer: T, inner: I[]) {
 				yield await Promise.resolve(selector(outer, inner))
-			}
+			},
+			innerVariable
 		)
 	}
 

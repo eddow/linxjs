@@ -40,20 +40,22 @@ allTests(numbers, students, courses, registrations)
 describe('debug', () => {
 	test('here', async () => {
 		/*expect(
-			await from`n in ${numbers} group n by n % 2`
-				.select(async (g: Group<number>) => [g.key, await g.toArray()])
-				.toArray()
+			await from`s in ${students}
+				join r in ${registrations} on s.name equals r.name
+				order by s.name, r.course
+				select { name: s.name, course: r.course }`.toArray()
 		).toEqual([
-			[0, [2, 4, 6, 8, 10]],
-			[1, [1, 3, 5, 7, 9]]
-		])
-		expect(
-			await from`n in ${numbers} group by n % 2`
-				.select(async (g: Group<number>) => [g.key, await g.toArray()])
-				.toArray()
-		).toEqual([
-			[0, [2, 4, 6, 8, 10]],
-			[1, [1, 3, 5, 7, 9]]
+			{ name: 'Bob', course: 'Geography' },
+			{ name: 'John', course: 'Geography' },
+			{ name: 'John', course: 'History' },
+			{ name: 'Mark', course: 'English' },
+			{ name: 'Mark', course: 'Math' },
+			{ name: 'Peter', course: 'Chemistry' },
+			{ name: 'Peter', course: 'English' },
+			{ name: 'Sara', course: 'Chemistry' },
+			{ name: 'Sara', course: 'Physics' },
+			{ name: 'Tim', course: 'History' },
+			{ name: 'Tim', course: 'Physics' }
 		])*/
 	})
 })

@@ -59,8 +59,11 @@ export function getVariablesUsed(body: string) {
 	// Remove strings from the function body (to avoid capturing parts of strings)
 	const bodyWithoutStrings = body.replace(/(["'`])(\\?.)*?\1/g, '')
 
+	// Remove object keys (anything before a colon in an object literal)
+	const bodyWithoutKeys = bodyWithoutStrings.replace(/\b\w+\s*:/g, '')
+
 	// Find all identifiers, including those used in array indices
-	const identifiers = [...bodyWithoutStrings.matchAll(/\b(\.?[a-zA-Z_]\w*)\b/g)].map(
+	const identifiers = [...bodyWithoutKeys.matchAll(/\b(\.?[a-zA-Z_]\w*)\b/g)].map(
 		(match) => match[0]
 	)
 

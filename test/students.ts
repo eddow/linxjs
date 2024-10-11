@@ -1,4 +1,4 @@
-import type { Linq } from '@linxjs/core'
+import { default as from } from '@linxjs/core'
 
 export interface Student {
 	name: string
@@ -15,7 +15,7 @@ export interface Registration {
 	course: string
 }
 
-export default function (from: Linq, students: any, courses: any, registrations: any) {
+export default function (students: any, courses: any, registrations: any) {
 	describe('students', () => {
 		test('order by', async () => {
 			expect(await from`s in ${students} order by s.age, s.name select s.name`.toArray()).toEqual([
@@ -68,7 +68,7 @@ export default function (from: Linq, students: any, courses: any, registrations:
 				await from`s in ${students}
 				join r in ${registrations} on s.name equals r.name
 				join c in ${courses} on r.course equals c.name
-				order by s.name, c.course
+				order by s.name, c.name
 				select { name: s.name, course: c.name, hours: c.hours }`.toArray()
 			).toEqual([
 				{ name: 'Bob', course: 'Geography', hours: 15 },

@@ -10,5 +10,5 @@ export function allTests(
 	registrations: LinqCollection<Registration>
 ) {
 	standardTest(numbers)
-	//studentsTest(students, courses, registrations)
+	studentsTest(students, courses, registrations)
 }

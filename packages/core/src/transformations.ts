@@ -121,9 +121,16 @@ export class JoinTransformation<
 				this.source,
 				this.outerSelector,
 				this.innerSelector,
-				this.into
+				this.into,
+				this.from
 			)
-		return enumerable.join<I, R>(this.source, this.outerSelector, this.innerSelector, this.from)
+		return enumerable.join<I, R>(
+			this.source,
+			this.outerSelector,
+			this.innerSelector,
+			this.from,
+			this.from
+		)
 	}
 }
 
