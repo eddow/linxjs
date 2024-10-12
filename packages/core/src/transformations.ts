@@ -8,7 +8,8 @@ import {
 	Predicate,
 	SemanticError,
 	Transmissible,
-	TransmissibleFunction
+	TransmissibleFunction,
+	unwrap
 } from './value'
 
 export abstract class Transformation<
@@ -139,6 +140,7 @@ export class GroupTransformation<
 	R extends BaseLinqQSEntry
 > extends Transformation {
 	constructor(
+		public singleVariable: string | undefined,
 		public value: TransmissibleFunction<R, [T]> | undefined,
 		public key: Comparable<T>,
 		public into: string = ''
@@ -148,8 +150,22 @@ export class GroupTransformation<
 	newVariables() {
 		return this.into ? [this.into] : []
 	}
+
 	transform(enumerable: LinqCollection<T>) {
-		return enumerable.groupBy<R>(this.key, this.value).wrap(this.into)
+		if (!(this.singleVariable || this.value))
+			throw new SemanticError(
+				'`group by` without value can only be used on a single variable collection '
+			)
+		return enumerable
+			.groupBy<R>(
+				this.key,
+				this.value ||
+					// `group by` => `group X by` where X is the single variable
+					new TransmissibleFunction(new InlineValue(undefined, [this.singleVariable]), [
+						this.singleVariable
+					])
+			)
+			.wrap(this.into)
 	}
 }
 

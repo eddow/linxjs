@@ -1,4 +1,3 @@
-// TODO Divide the file and comment
 import {
 	Comparable,
 	LinqCollection,
@@ -10,152 +9,23 @@ import {
 	keyedGroup,
 	Predicate,
 	PromisedIterable,
-	TransmissibleFunction,
 	Transmissible,
-	InlineValue,
-	cachedTransmissibleFunction,
 	List,
 	BaseLinqQSEntry,
 	OrderSpec,
-	linxArgName,
-	analyzeLambda,
-	constant
+	constant,
+	unwrap,
+	toArray,
+	functional,
+	promised
 } from '@linxjs/core'
+import { comparablePair, concatResultSelector, MemCollectionEntry } from './helpers'
 
-//#region Helpers
-
-async function unwrap<T extends BaseLinqEntry, R extends BaseLinqEntry>(v: T): Promise<R> {
-	if (typeof v !== 'object') new Error(`Not a wrapped object: ${v}`)
-	const keys = Object.keys(v)
-	if (keys.length !== 1)
-		throw new Error(`Selection cannot select several objects: ${keys.join(', ')}`)
-	return <R>(<MemCollectionEntry>v)[keys[0]]
-}
-function concatResultSelector<
-	T extends BaseLinqEntry,
-	O extends BaseLinqEntry,
-	R extends BaseLinqEntry
->(resultSelector: Transmissible<R, [T, O]> | string): (e: T, o: O) => Promise<R> {
-	return typeof resultSelector === 'string'
-		? (e: T, o: O) =>
-				Promise.resolve(<R>{
-					...(<MemCollectionEntry>e),
-					[resultSelector]: o
-				})
-		: f(resultSelector)
-}
-/**
- * The `id` function is useful as it can be used as an index in the cache
- * @param v
- * @returns
- */
-function id<T extends BaseLinqEntry = BaseLinqEntry, R extends BaseLinqEntry = T>(v: T): R {
-	return <R>(<unknown>v)
+function id<T extends BaseLinqEntry, R extends BaseLinqEntry>(v: T): Promise<R> {
+	return Promise.resolve(<R>(<unknown>v))
 }
 
-type MemCollectionEntry = Record<string, any>
-
-const fctCache = new WeakMap<TransmissibleFunction<any>, (...args: any[]) => Promise<any>>()
-/**
- * Make a JS-callable funcion from a transmissible
- * @param transmissible
- * @param availableParams
- * @returns
- */
-function f<R, T extends BaseLinqEntry[] = BaseLinqEntry[]>(
-	transmissible?: Transmissible<R, T>,
-	availableParams: number = 1
-): (...args: T) => Promise<R> {
-	if (!transmissible) return <(...args: T) => Promise<R>>transmissible
-	const tf = cachedTransmissibleFunction(transmissible, availableParams)
-	let rv = <(...args: T) => Promise<R>>fctCache.get(<TransmissibleFunction<any>>tf)
-	if (!rv) {
-		let tf: TransmissibleFunction<R, T>, fct: (...args: any[]) => Promise<R>
-		if (transmissible instanceof TransmissibleFunction) tf = transmissible
-		else if (typeof transmissible === 'function')
-			tf = new TransmissibleFunction(<(...args: T) => R>transmissible, availableParams)
-		else tf = new TransmissibleFunction(new InlineValue([transmissible]), availableParams)
-
-		if (tf.constant) fct = () => Promise.resolve(tf.constant)
-		else if (typeof tf.from === 'function') fct = resolved(tf.from)
-		else fct = resolved(<(...args: T) => R>new Function(tf.params.join(', '), `return ${tf.body}`))
-		rv = !tf.fromQSEntry
-			? <(...args: T) => Promise<R>>fct
-			: //We assume T = [BaseLinqQSEntry]
-				<(...args: T) => Promise<R>>(<unknown>(async (sqEntry: Record<string, any>) => {
-					async function callIfNeeded(arg: any) {
-						if (typeof arg !== 'function') return arg
-						const { params } = analyzeLambda(arg)
-						const args = params.map((p) => sqEntry[p])
-						return arg(...args)
-					}
-					const args = <T>(
-						await Promise.all(
-							tf.params.map(async (p) =>
-								p === linxArgName ? await Promise.all(tf.args.map(callIfNeeded)) : sqEntry[p]
-							)
-						)
-					)
-					return fct(...args)
-				}))
-		fctCache.set(<TransmissibleFunction<any>>tf, rv)
-	}
-
-	return rv
-}
-
-function resolved<T extends any[], R>(
-	fct: (...args: T) => R | Promise<R>
-): (...args: T) => Promise<R> {
-	return (...args: T) => {
-		let rv: any = fct(...args)
-		if (!(rv instanceof Promise)) rv = Promise.resolve(rv)
-		return rv
-	}
-}
-
-async function toArray<T = any>(enumerable: AsyncIterable<T>): Promise<T[]> {
-	const rv = []
-	for await (const v of enumerable) rv.push(v)
-	return rv
-}
-
-async function comparablePair<T>(
-	v: T,
-	comparable?: (item: T) => Promise<Primitive>
-): Promise<[T, Primitive]> {
-	const c: Primitive = comparable ? await comparable(v) : <Primitive>v
-	if (!['number', 'string', 'boolean'].includes(typeof c))
-		throw new SemanticError("Can't sum non-numeric values")
-	return [v, c]
-}
-
-/**
- * Converts an iterable to a {@link LinqCollection} if it's not already one.
- * Server-first collector: if a source from a query is given and is more specified in the linq query,
- * the specifications will be added to the already existing collection and sent as a request
- * @param {AsyncIterable<T>} enumerable The iterable to convert.
- * @returns {LinqCollection<T>} The converted collection.
- */
-export default function memCollection<T extends BaseLinqEntry>(
-	enumerable: AsyncIterable<T> | Iterable<T>
-): LinqCollection<T> {
-	return enumerable instanceof LinqCollection ? enumerable : new MemCollection(enumerable)
-}
-
-/**
- * Converts an iterable to a {@link LinqCollection} if it's not already one.
- * Client-first collector: if a source from a query is given and is more specified in the linq query,
- * the specifications will be executed in the client's memory by default
- * @param {AsyncIterable<T>} enumerable The iterable to convert.
- * @returns {LinqCollection<T>} The converted collection.
- */
-export function greedyCollector<T extends BaseLinqEntry>(
-	enumerable: AsyncIterable<T>
-): MemCollection<T> {
-	return enumerable instanceof MemCollection ? enumerable : new MemCollection(enumerable)
-}
-
+//#region generic
 function join<T extends BaseLinqEntry, I extends BaseLinqEntry, R extends BaseLinqEntry>(
 	outer: AsyncIterable<T>,
 	inner: AsyncIterable<I>,
@@ -164,8 +34,8 @@ function join<T extends BaseLinqEntry, I extends BaseLinqEntry, R extends BaseLi
 	resultSelector: (outer: T, inner: I[]) => AsyncIterable<R>,
 	innerVariable?: string
 ): MemCollection<R> {
-	const fOuterKS = f(outerKeySelector),
-		fInnerKS = f(innerKeySelector)
+	const fOuterKS = functional(outerKeySelector),
+		fInnerKS = functional(innerKeySelector)
 	function innerWrap(innerCollection: LinqCollection) {
 		return <LinqCollection<I>>(
 			(innerVariable ? innerCollection.wrap(innerVariable) : innerCollection)
@@ -229,6 +99,32 @@ function join<T extends BaseLinqEntry, I extends BaseLinqEntry, R extends BaseLi
 }
 //#endregion
 
+/**
+ * Converts an iterable to a {@link LinqCollection} if it's not already one.
+ * Server-first collector: if a source from a query is given and is more specified in the linq query,
+ * the specifications will be added to the already existing collection and sent as a request
+ * @param {AsyncIterable<T>} enumerable The iterable to convert.
+ * @returns {LinqCollection<T>} The converted collection.
+ */
+export default function memCollection<T extends BaseLinqEntry>(
+	enumerable: AsyncIterable<T> | Iterable<T>
+): MemCollection<T> {
+	return enumerable instanceof MemCollection ? enumerable : new MemCollection(enumerable)
+}
+
+/**
+ * Converts an iterable to a {@link LinqCollection} if it's not already one.
+ * Client-first collector: if a source from a query is given and is more specified in the linq query,
+ * the specifications will be executed in the client's memory by default
+ * @param {AsyncIterable<T>} enumerable The iterable to convert.
+ * @returns {LinqCollection<T>} The converted collection.
+ */
+export function greedyCollector<T extends BaseLinqEntry>(
+	enumerable: AsyncIterable<T>
+): MemCollection<T> {
+	return enumerable instanceof MemCollection ? enumerable : new MemCollection(enumerable)
+}
+
 export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends LinqCollection<T> {
 	private enumerable: AsyncIterable<T>
 	private get length(): number | undefined {
@@ -265,7 +161,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 	async sum(numeric?: Numeric<T>): Promise<number> {
 		let rv = 0
 		for await (const v of this.enumerable) {
-			const n = numeric ? f(numeric)(v) : v
+			const n = numeric ? functional(numeric)(v) : v
 			if (typeof n !== 'number') throw new SemanticError("Can't sum non-numeric values")
 			rv += n
 		}
@@ -275,7 +171,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		let sum = 0,
 			count = 0
 		for await (const v of this.enumerable) {
-			const n = numeric ? f(numeric)(v) : v
+			const n = numeric ? functional(numeric)(v) : v
 			if (typeof n !== 'number') throw new SemanticError("Can't sum non-numeric values")
 			sum += n
 			count++
@@ -285,14 +181,14 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 	async min(comparable?: Comparable<T>): Promise<T> {
 		let rv: [T, Primitive]
 		for await (const v of this.enumerable) {
-			const tv = await comparablePair(v, f(comparable))
-			if (rv === undefined) rv = await comparablePair(v, f(comparable))
+			const tv = await comparablePair(v, functional(comparable))
+			if (rv === undefined) rv = await comparablePair(v, functional(comparable))
 			else if (tv[1] < rv[1]) rv = tv
 		}
 		return rv[0]
 	}
 	async max(comparable?: Comparable<T>): Promise<T> {
-		const fComparable = f(comparable)
+		const fComparable = functional(comparable)
 		let rv: [T, Primitive]
 		for await (const v of this.enumerable) {
 			const tv = await comparablePair(v, fComparable)
@@ -302,20 +198,21 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		return rv[0]
 	}
 	async aggregate<R>(seed: R, reducer: Transmissible<R, [R, T]>): Promise<R> {
-		const promised = f(reducer)
+		const functions = { reducer: functional(reducer) }
 		let rv = seed
-		for await (const v of this.enumerable) rv = await promised(rv, v)
+		for await (const v of this.enumerable) rv = await functions.reducer(rv, v)
 		return rv
 	}
 
 	async all(predicate: Predicate<T>): Promise<boolean> {
-		const promised = f(predicate)
-		for await (const v of this.enumerable) if (!(await promised(v))) return false
+		const functions = { predicate: functional(predicate) }
+		for await (const v of this.enumerable) if (!(await functions.predicate(v))) return false
 		return true
 	}
 	async any(predicate?: Predicate<T>): Promise<boolean> {
-		const promised = f(predicate)
-		for await (const v of this.enumerable) if (!promised || (await promised(v))) return true
+		const functions = { predicate: functional(predicate) }
+		for await (const v of this.enumerable)
+			if (!promised || (await functions.predicate(v))) return true
 		return false
 	}
 
@@ -336,9 +233,9 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		return defaultValue
 	}
 	async last(predicate?: Predicate<T>): Promise<T> {
-		const promised = f(predicate)
+		const functions = { predicate: functional(predicate) }
 		let rv: T
-		for await (const v of this.enumerable) if (!predicate || (await promised(v))) rv = v
+		for await (const v of this.enumerable) if (!predicate || (await functions.predicate(v))) rv = v
 		if (rv === undefined) throw new SemanticError('Empty collection')
 		return rv
 	}
@@ -374,7 +271,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 	//#endregion
 	//#region pagination
 
-	take(n: number): LinqCollection<T> {
+	take(n: number): MemCollection<T> {
 		const { enumerable } = this
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
@@ -386,7 +283,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 			}
 		})
 	}
-	takeWhile(predicate: (item: T) => boolean): LinqCollection<T> {
+	takeWhile(predicate: (item: T) => boolean): MemCollection<T> {
 		const { enumerable } = this
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
@@ -397,7 +294,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 			}
 		})
 	}
-	takeLast(n: number): LinqCollection<T> {
+	takeLast(n: number): MemCollection<T> {
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
 				const rv = []
@@ -409,7 +306,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 			}
 		})
 	}
-	takeLastWhile(predicate: (item: T) => boolean): LinqCollection<T> {
+	takeLastWhile(predicate: (item: T) => boolean): MemCollection<T> {
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
 				let rv = []
@@ -422,7 +319,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		})
 	}
 
-	skip(n: number): LinqCollection<T> {
+	skip(n: number): MemCollection<T> {
 		const { enumerable } = this
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
@@ -432,7 +329,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		})
 	}
 
-	skipWhile(predicate: (item: T) => boolean): LinqCollection<T> {
+	skipWhile(predicate: (item: T) => boolean): MemCollection<T> {
 		const { enumerable } = this
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
@@ -448,7 +345,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 	//#endregion
 	//#region set operations
 
-	defaultIfEmpty(defaultValue: T = null): LinqCollection<T> {
+	defaultIfEmpty(defaultValue: T = null): MemCollection<T> {
 		const { enumerable } = this
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
@@ -461,7 +358,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 			}
 		})
 	}
-	distinct(comparer?: (itemA: T, itemB: T) => boolean): LinqCollection<T> {
+	distinct(comparer?: (itemA: T, itemB: T) => boolean): MemCollection<T> {
 		if (comparer) throw new Error('Memory `distinct` does not support `comparer`')
 		const { enumerable } = this
 		return new MemCollection({
@@ -477,14 +374,14 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		})
 	}
 
-	distinctBy(by: Comparable<T>): LinqCollection<T> {
+	distinctBy(by: Comparable<T>): MemCollection<T> {
 		const { enumerable } = this,
-			promised = f(by)
+			functions = { by: functional(by) }
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
 				const seen = new Set<Primitive>()
 				for await (const v of enumerable) {
-					const key = await promised(v)
+					const key = await functions.by(v)
 					if (!seen.has(key)) {
 						seen.add(key)
 						yield v
@@ -494,7 +391,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		})
 	}
 
-	append(...items: T[]): LinqCollection<T> {
+	append(...items: T[]): MemCollection<T> {
 		const { enumerable } = this
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
@@ -503,7 +400,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 			}
 		})
 	}
-	prepend(...items: T[]): LinqCollection<T> {
+	prepend(...items: T[]): MemCollection<T> {
 		const { enumerable } = this
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
@@ -513,7 +410,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		})
 	}
 
-	concat(other: AsyncIterable<T>): LinqCollection<T> {
+	concat(other: AsyncIterable<T>): MemCollection<T> {
 		const { enumerable } = this
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
@@ -522,15 +419,15 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 			}
 		})
 	}
-	union(other: AsyncIterable<T>): LinqCollection<T> {
+	union(other: AsyncIterable<T>): MemCollection<T> {
 		// TODO: after orderBy
 		throw new Error('Not implemented')
 	}
-	intersect(other: AsyncIterable<T>): LinqCollection<T> {
+	intersect(other: AsyncIterable<T>): MemCollection<T> {
 		// TODO: after orderBy
 		throw new Error('Not implemented')
 	}
-	except(other: AsyncIterable<T>): LinqCollection<T> {
+	except(other: AsyncIterable<T>): MemCollection<T> {
 		// TODO: after orderBy
 		throw new Error('Not implemented')
 	}
@@ -538,9 +435,9 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 	multiplyBy<O extends BaseLinqEntry, R extends BaseLinqEntry>(
 		other: Transmissible<List<O>, [T]>,
 		resultSelector: Transmissible<R, [T, O]> | string
-	): LinqCollection<R> {
+	): MemCollection<R> {
 		const enumerable = this.enumerable,
-			otherFct = f(other)
+			otherFct = functional(other)
 		const selector = concatResultSelector(resultSelector)
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<R> {
@@ -559,7 +456,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		innerKeySelector: Comparable<I>,
 		resultSelector: Transmissible<R, [T, I]> | string,
 		innerVariable?: string
-	): LinqCollection<R> {
+	): MemCollection<R> {
 		const selector = concatResultSelector(resultSelector)
 		return join<T, I, R>(
 			this.enumerable,
@@ -579,7 +476,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		innerKeySelector: Comparable<I>,
 		resultSelector: Transmissible<R, [T, I[]]> | string,
 		innerVariable?: string
-	): LinqCollection<R> {
+	): MemCollection<R> {
 		const selector = concatResultSelector(resultSelector)
 		return join(
 			this.enumerable,
@@ -596,11 +493,12 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 	groupBy<R extends BaseLinqEntry>(
 		keySelector: Comparable<T>,
 		elementSelector?: Transmissible<R, [T]>
-	): LinqCollection<Group<R>> {
+	): MemCollection<Group<R>> {
 		const me = this,
-			promised = {
-				keySelector: f(keySelector),
-				elementSelector: elementSelector ? f(elementSelector) : unwrap<T, R>
+			functions = {
+				keySelector: functional(keySelector),
+				// If no elementSelector `group *...* by ...` is provided, use the identity function
+				elementSelector: elementSelector ? functional(elementSelector) : id<T, R>
 			}
 		return new MemCollection<Group<R>>({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<Group<R>> {
@@ -609,14 +507,14 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 					[Symbol.asyncIterator]()
 				let iteratorResult = await iterator.next()
 				if (iteratorResult.done) return
-				let key = await promised.keySelector(iteratorResult.value)
+				let key = await functions.keySelector(iteratorResult.value)
 				while (!iteratorResult.done) {
 					const groupKey = key,
 						group: R[] = []
 					do {
-						group.push(await promised.elementSelector(iteratorResult.value))
+						group.push(await functions.elementSelector(iteratorResult.value))
 						iteratorResult = await iterator.next()
-						if (!iteratorResult.done) key = await promised.keySelector(iteratorResult.value)
+						if (!iteratorResult.done) key = await functions.keySelector(iteratorResult.value)
 					} while (!iteratorResult.done && key === groupKey)
 					yield keyedGroup<R>(groupKey, new MemCollection<R>(group))
 				}
@@ -624,64 +522,66 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		})
 	}
 
-	where(predicate: Predicate<T>): LinqCollection<T> {
+	where(predicate: Predicate<T>): MemCollection<T> {
 		const { enumerable } = this,
-			promised = f(predicate)
+			functions = { predicate: functional(predicate) }
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
 				for await (const v of enumerable) {
-					if (await promised(v)) yield <T>v
+					if (await functions.predicate(v)) yield <T>v
 				}
 			}
 		})
 	}
-	let<O extends unknown, R extends BaseLinqQSEntry>(
+	let<O extends BaseLinqEntry, R extends BaseLinqQSEntry>(
 		value: Transmissible<O, [T]>,
 		variable: string
-	): LinqCollection<R> {
+	): MemCollection<R> {
 		const { enumerable } = this,
-			promised = f(value)
+			functions = { value: functional(value) }
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<R> {
 				for await (const v of enumerable) {
-					yield <R>{ ...(<MemCollectionEntry>v), [variable]: await promised(v) }
+					yield <R>{ ...(<MemCollectionEntry>v), [variable]: await functions.value(v) }
 				}
 			}
 		})
 	}
-	select<R>(value: Transmissible<R, [T]>): LinqCollection<R> {
+	select<R extends BaseLinqEntry>(value: Transmissible<unknown, [T]>): MemCollection<R> {
 		const { enumerable } = this,
-			promised = f(value)
+			functions = { value: functional(value) }
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<R> {
 				for await (const v of enumerable) {
-					yield await promised(v)
+					yield <R>await functions.value(v)
 				}
 			}
 		})
 	}
 
-	/*selectMany<R>(value: Transmissible<AsyncIterable<R>, [T]>): LinqCollection<R> {
+	/*selectMany<R>(value: Transmissible<AsyncIterable<R>, [T]>): MemCollection<R> {
 		const { enumerable } = this,
-			promised = f(value)
+			functions = { value: functional(value) }
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<R> {
 				for await (const v of enumerable) {
-					yield* await promised(v)
+					yield* await functions.value(v)
 				}
 			}
 		})
 	}*/
 
-	order(...orders: OrderSpec<T>[]): LinqCollection<T> {
+	order(...orders: OrderSpec<T>[]): MemCollection<T> {
 		const { enumerable } = this
-		const promised = orders.map(({ by }) => f(by))
+		const functions = { orders: orders.map(({ by }) => functional(by)) }
 		return new MemCollection({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
 				const array = await toArray(enumerable),
 					valued: [Primitive[], T][] = await Promise.all(
 						array.map(async (v: T) => {
-							const allValues = await Promise.all(promised.map(async (order) => await order(v)))
+							const allValues = await Promise.all(
+								functions.orders.map(async (order) => await order(v))
+							)
 							return [allValues, v]
 						})
 					)
@@ -700,7 +600,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		})
 	}
 
-	wrap<R extends BaseLinqQSEntry>(name: string = ''): LinqCollection<R> {
+	wrap<R extends BaseLinqQSEntry>(name: string = ''): MemCollection<R> {
 		const { enumerable } = this
 		return new MemCollection<R>({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<R> {
@@ -709,13 +609,13 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		})
 	}
 
-	unwrap<R>(): LinqCollection<R> {
+	unwrap<R>(): MemCollection<R> {
 		const { enumerable } = this
 		return new MemCollection<R>({
 			async *[Symbol.asyncIterator](): AsyncIterableIterator<R> {
-				for await (const v of enumerable) yield await unwrap<T, R>(v)
+				for await (const v of enumerable) yield unwrap<object, R>(<Awaited<object>>v)
 			}
-		}) as LinqCollection<R>
+		})
 	}
 
 	//#endregion

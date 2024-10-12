@@ -72,6 +72,7 @@ export abstract class LinqCollection<T extends BaseLinqEntry = BaseLinqEntry>
 	 * @param outerKeySelector A function to extract the join key from each element of the current sequence.
 	 * @param innerKeySelector A function to extract the join key from each element of the inner sequence.
 	 * @param resultSelector A function to create a result element from an element from the current sequence and a sequence of elements from the inner sequence.
+	 * @param innerVariable The name of the variable in the result selector that contains the inner sequence.
 	 * @returns A new sequence that contains the results of the join operation.
 	 */
 	abstract join<I extends BaseLinqEntry, R extends BaseLinqQSEntry>(
@@ -88,6 +89,7 @@ export abstract class LinqCollection<T extends BaseLinqEntry = BaseLinqEntry>
 	 * @param outerKeySelector A function to extract the join key from each element of the current sequence.
 	 * @param innerKeySelector A function to extract the join key from each element of the inner sequence.
 	 * @param resultSelector A function to create a result element from an element from the current sequence and a sequence of elements from the inner sequence.
+	 * @param innerVariable The name of the variable in the result selector that contains the inner sequence.
 	 * @returns A new sequence that contains the results of the join operation.
 	 */
 	abstract groupJoin<I extends BaseLinqEntry, R extends BaseLinqQSEntry>(
@@ -112,7 +114,7 @@ export abstract class LinqCollection<T extends BaseLinqEntry = BaseLinqEntry>
 	//#endregion
 
 	abstract where(predicate: Predicate<T>): LinqCollection<T>
-	abstract select<R extends BaseLinqQSEntry>(value: Transmissible<R, [T]>): LinqCollection<R>
+	abstract select<R extends BaseLinqEntry>(value: Transmissible<R, [T]>): LinqCollection<R>
 
 	orderBy(by: Comparable<T>): OrderedLinqCollection<T> {
 		return new OrderedLinqCollection(this, [{ by, way: 'asc' }])
@@ -124,11 +126,11 @@ export abstract class LinqCollection<T extends BaseLinqEntry = BaseLinqEntry>
 	//#endregion
 	//#region Not in linq spec, internal usage
 
+	abstract order(...orders: OrderSpec<T>[]): LinqCollection<T>
 	abstract let<O extends BaseLinqEntry, R extends BaseLinqQSEntry>(
 		value: Transmissible<O, [T]>,
 		variable: string
 	): LinqCollection<R>
-	abstract order(...orders: OrderSpec<T>[]): LinqCollection<T>
 	abstract wrap<R extends BaseLinqQSEntry>(name?: string): LinqCollection<R>
 	abstract unwrap<R extends BaseLinqEntry>(): LinqCollection<R>
 
@@ -293,8 +295,8 @@ export class OrderedLinqCollection<T extends BaseLinqEntry> extends LinqCollecti
 	where(predicate: Predicate<T>): LinqCollection<T> {
 		return this.ordered.where(predicate)
 	}
-	select<R extends BaseLinqQSEntry>(value: Transmissible<R, [T]>): LinqCollection<R> {
-		return this.ordered.select(value)
+	select<R extends BaseLinqEntry>(value: Transmissible<R, [T]>): LinqCollection<R> {
+		return this.ordered.select<R>(value)
 	}
 	let<O extends BaseLinqEntry, R extends BaseLinqQSEntry>(
 		value: Transmissible<O, [T]>,

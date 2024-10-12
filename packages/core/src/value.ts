@@ -1,4 +1,16 @@
 import type { LinqCollection } from './collection'
+import type { TemplateStringsReader } from './parser'
+
+export class LinqParseError extends Error {
+	constructor(reader: TemplateStringsReader, message: string) {
+		const part = reader.parts[reader.part],
+			indicator = !part
+				? '-end of linq-'
+				: part.substring(0, reader.posInPart) + '<^>' + part.substring(reader.posInPart)
+		super(indicator + '\n' + message)
+		this.name = 'LinqParseError'
+	}
+}
 
 export class InlineValue {
 	constructor(
@@ -13,6 +25,7 @@ export type BaseLinqQSEntry = object
 export class SemanticError extends Error {
 	constructor(message: string, parent?: Error) {
 		super(message)
+		this.name = 'SemanticError'
 	}
 }
 
@@ -37,11 +50,11 @@ export class PromisedIterator<T> implements AsyncIterator<T> {
 	async next(): Promise<IteratorResult<T>> {
 		return this.it.next()
 	}
-	async return(): Promise<IteratorResult<T>> {
-		return this.it.return()
+	async return?(): Promise<IteratorResult<T>> {
+		return this.it.return!()
 	}
-	async throw(e: any): Promise<IteratorResult<T>> {
-		return this.it.throw(e)
+	async throw?(e: any): Promise<IteratorResult<T>> {
+		return this.it.throw!(e)
 	}
 }
 
@@ -83,7 +96,7 @@ export function analyzeLambda(lambda: (...args: any[]) => any) {
 			.toString()
 			.replace(/\n|\r|(^async )|(await )/g, ' ')
 			.trim(),
-		match = /^(?:(?:\((.*?)\))|((?:.*?)))\s*\=\>\s*(.*)$/.exec(str)
+		match = /^(?:(?:\((.*?)\))|((?:.*?)))\s*\=\>\s*(.*?)\s*$/.exec(str)
 	if (!match) throw new SyntaxError(`Invalid function (must be lambda): ${str}`)
 	return {
 		params: (match[1] || match[2]).split(',').map((s) => s.trim()),
@@ -166,13 +179,106 @@ export function transmissibleFunction<R, T extends BaseLinqEntry[] = BaseLinqEnt
 		return new TransmissibleFunction<R, T>(<(...args: T) => R>transmissible, availableParams)
 	return new TransmissibleFunction<R, T>(new InlineValue([transmissible]), availableParams)
 }
-export type Primitive = string | number | boolean
+export type Primitive = string | number | bigint | boolean | RegExp | null | undefined
 export type Numeric<T extends BaseLinqEntry> = Transmissible<number, [T]>
 export type Comparable<T extends BaseLinqEntry> = Transmissible<Primitive, [T]>
 export type Predicate<T extends BaseLinqEntry> = Transmissible<boolean, [T]>
 export interface OrderSpec<T extends BaseLinqEntry = BaseLinqEntry> {
 	by: Comparable<T>
 	way: 'asc' | 'desc'
+}
+
+//#endregion
+//#region general helpers for implementations
+
+export async function toArray<T = any>(enumerable: AsyncIterable<T>): Promise<T[]> {
+	const rv: T[] = []
+	for await (const v of enumerable) rv.push(v)
+	return rv
+}
+
+export function unwrap<T extends object, R extends BaseLinqEntry>(v: T): R {
+	if (typeof v !== 'object') new Error(`Not a wrapped object: ${v}`)
+	const keys = Object.keys(v)
+	if (keys.length !== 1)
+		throw new Error(`Selection cannot select several objects: ${keys.join(', ')}`)
+	return <R>(<Record<string, any>>v)[keys[0]]
+}
+
+const tfCache = new WeakMap<Transmissible<any>, TransmissibleFunction<any>>()
+export function cachedTransmissibleFunction<R, T extends BaseLinqEntry[] = BaseLinqEntry[]>(
+	transmissible: Transmissible<R, T>,
+	availableParams: number = 0
+): TransmissibleFunction<R, T> {
+	let tf =
+		transmissible instanceof TransmissibleFunction
+			? transmissible
+			: <TransmissibleFunction<R, T>>tfCache.get(transmissible)
+	if (!tf) {
+		tf = transmissibleFunction(transmissible, availableParams)
+		tfCache.set(transmissible, <TransmissibleFunction<any>>tf)
+	}
+	return tf
+}
+
+export function promised<T extends any[], R>(
+	fct: (...args: T) => R | Promise<R>
+): (...args: T) => Promise<R> {
+	return (...args: T) => Promise.resolve(fct(...args))
+}
+
+const fctCache = new WeakMap<TransmissibleFunction<any>, (...args: any[]) => Promise<any>>()
+/**
+ * Make a JS-callable function from a transmissible
+ * @param transmissible
+ * @param availableParams
+ * @returns
+ */
+export function functional<R, T extends BaseLinqEntry[] = BaseLinqEntry[]>(
+	transmissible?: Transmissible<R, T>,
+	availableParams: number = 1
+): (...args: T) => Promise<R> {
+	if (!transmissible) return <(...args: T) => Promise<R>>transmissible
+	const tf = cachedTransmissibleFunction(transmissible, availableParams)
+	let rv = <(...args: T) => Promise<R>>fctCache.get(<TransmissibleFunction<any>>tf)
+	if (!rv) {
+		let tf: TransmissibleFunction<R, T>, fct: (...args: any[]) => Promise<R>
+		if (transmissible instanceof TransmissibleFunction) tf = transmissible
+		else if (typeof transmissible === 'function')
+			tf = new TransmissibleFunction(<(...args: T) => R>transmissible, availableParams)
+		else tf = new TransmissibleFunction(new InlineValue([transmissible]), availableParams)
+
+		if (tf.constant) fct = () => Promise.resolve(tf.constant!)
+		else if (typeof tf.from === 'function') fct = promised(tf.from)
+		else fct = promised(<(...args: T) => R>new Function(tf.params.join(', '), `return ${tf.body}`))
+		rv = !tf.fromQSEntry
+			? <(...args: T) => Promise<R>>fct
+			: //We assume T = [BaseLinqQSEntry]
+				<(...args: T) => Promise<R>>(<unknown>(async (sqEntry: Record<string, any>) => {
+					async function callIfNeeded(arg: any) {
+						if (typeof arg !== 'function') return arg
+						const { params } = analyzeLambda(arg)
+						const args = params.map((p) => sqEntry[p])
+						return arg(...args)
+					}
+					const args = <T>await Promise.all(
+						tf.params.map(async (p) =>
+							// if linxArgName is used, tf.args should be defined
+							p === linxArgName ? await Promise.all(tf.args!.map(callIfNeeded)) : sqEntry[p]
+						)
+					)
+					return fct(...args)
+				}))
+		fctCache.set(<TransmissibleFunction<any>>tf, rv)
+	}
+
+	return rv
+}
+
+export function constant<R>(transmissible: Transmissible<R>): R {
+	const tf = cachedTransmissibleFunction(transmissible)
+	if (!tf.constant) throw new Error(`Constant expected: ${tf.body}`)
+	return tf.constant
 }
 
 //#endregion

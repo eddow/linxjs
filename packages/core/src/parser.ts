@@ -13,6 +13,7 @@ import {
 	BaseLinqEntry,
 	BaseLinqQSEntry,
 	InlineValue,
+	LinqParseError,
 	OrderSpec,
 	Primitive,
 	SemanticError,
@@ -23,16 +24,6 @@ export interface Parsed {
 	enumerable: any
 	variables: string[]
 	transformations: Transformation[]
-}
-
-export class SyntaxError extends Error {
-	constructor(reader: TemplateStringsReader, message: string) {
-		const part = reader.parts[reader.part],
-			indicator = !part
-				? '-end of linq-'
-				: part.substring(0, reader.posInPart) + '<^>' + part.substring(reader.posInPart)
-		super(indicator + '\n' + message)
-	}
 }
 
 const linqKeywords = [
@@ -96,14 +87,14 @@ export class TemplateStringsReader {
 	 * Skips whitespace from the current position.
 	 * If current position is at an argument, moves to next one.
 	 * If current position is at the end of a part, moves to the next part.
-	 * @throws {SyntaxError} If the next word is not a valid key word.
+	 * @throws {LinqParseError} If the next word is not a valid key word.
 	 * @returns The next word
 	 */
 	nextWord() {
 		this.trim()
 		let pp = this.parts[this.part]?.substring(this.posInPart).trimStart()
 		const bone = pp && /^(\w+)\s*/.exec(pp)
-		if (!bone) throw new SyntaxError(this, 'Expecting key word')
+		if (!bone) throw new LinqParseError(this, 'Expecting key word')
 		this.posInPart += bone[0].length
 		return bone[1]
 	}
@@ -160,7 +151,7 @@ export class TemplateStringsReader {
 		}
 		let parsable = new InlineValue(),
 			nextRead
-		if (type === 'external') throw new SyntaxError(this, 'Expecting external value: ${...}')
+		if (type === 'external') throw new LinqParseError(this, 'Expecting external value: ${...}')
 		do {
 			nextRead = jsFirst.exec(next)
 			const commaLess = noComma.exec(next)
@@ -187,22 +178,22 @@ export class TemplateStringsReader {
 	}
 
 	/**
-	 * Consumes the next word and throws a SyntaxError if it is not the given word.
+	 * Consumes the next word and throws a LinqParseError if it is not the given word.
 	 * @param word The word to expect.
-	 * @throws {SyntaxError} If the next word is not the given word.
+	 * @throws {LinqParseError} If the next word is not the given word.
 	 */
 	expect(...words: string[]): true {
-		if (!this.isWord(...words)) throw new SyntaxError(this, `Expecting ${words.join(' or ')}`)
+		if (!this.isWord(...words)) throw new LinqParseError(this, `Expecting ${words.join(' or ')}`)
 		return true
 	}
 
 	/**
-	 * Consumes the next given characters and throws a SyntaxError if they are not found.
+	 * Consumes the next given characters and throws a LinqParseError if they are not found.
 	 * @param raw The raw string to expect.
-	 * @throws {SyntaxError} If the next word is not the given raw string.
+	 * @throws {LinqParseError} If the next word is not the given raw string.
 	 */
 	expectRaw(raw: string): true {
-		if (!this.isRaw(raw)) throw new SyntaxError(this, `Expecting ${raw}`)
+		if (!this.isRaw(raw)) throw new LinqParseError(this, `Expecting ${raw}`)
 		return true
 	}
 }
@@ -259,18 +250,19 @@ export function parse(parts: TemplateStringsArray, ...args: any[]) {
 				},
 				group: () =>
 					new GroupTransformation(
+						variables.length === 1 ? variables[0] : undefined,
 						reader.peekWord() === 'by' ? undefined : reader.nextValue<BaseLinqEntry>(variables),
 						reader.expect('by') && reader.nextValue(variables),
-						reader.isWord('into') && reader.nextWord()
+						reader.isWord('into') ? reader.nextWord() : undefined
 					),
 				select: () =>
 					new SelectTransformation(
 						reader.nextValue<BaseLinqQSEntry>(variables),
-						reader.isWord('into') && reader.nextWord()
+						reader.isWord('into') ? reader.nextWord() : undefined
 					)
 			}[transformationName]
 		if (!createTransformation)
-			throw new SyntaxError(reader, `Unknown transformation: ${transformationName}`)
+			throw new LinqParseError(reader, `Unknown transformation: ${transformationName}`)
 		const transformation = createTransformation()
 		variables = transformation.newVariables(variables)
 		rv.transformations.push(transformation)

@@ -1,11 +1,22 @@
-import Knex from 'knex'
+import { Primitive } from '@linxjs/core'
+import Knex, { type knex } from 'knex'
 
 interface KnexInstance extends Knex.Knex {}
 
-export function getTableColumns(
+//#region Table columns
+// TODO: Only sqlite3 has been tested
+
+const cachedTableFields: Record<string, string[]> = {}
+export async function getTableColumns(
 	knexInstance: KnexInstance,
 	tableName: string
 ): Promise<string[]> {
+	if (cachedTableFields[tableName]) return cachedTableFields[tableName]
+	const rv = await retrieveTableColumns(knexInstance, tableName)
+	return (cachedTableFields[tableName] = rv)
+}
+
+function retrieveTableColumns(knexInstance: KnexInstance, tableName: string): Promise<string[]> {
 	const client = knexInstance.client.config.client
 
 	switch (client) {
@@ -58,7 +69,7 @@ async function getMySQLColumns(knexInstance: KnexInstance, tableName: string): P
 // SQLite: Retrieve columns using PRAGMA table_info
 async function getSQLiteColumns(knexInstance: KnexInstance, tableName: string): Promise<string[]> {
 	const result = await knexInstance.raw(`PRAGMA table_info(${tableName})`)
-	return result[0].map((col: { name: string }) => col.name)
+	return result.map((col: { name: string }) => col.name)
 }
 
 // Microsoft SQL Server: Retrieve columns from information_schema
@@ -84,3 +95,16 @@ async function getPhoenixColumns(knexInstance: KnexInstance, tableName: string):
 		.where('TABLE_NAME', tableName.toUpperCase())
 	return columns.map((col) => col.COLUMN_NAME)
 }
+
+//#endregion
+//#region Types
+
+export type QueryBuilder = knex.Knex.QueryBuilder
+
+export type RawSql = [string, Primitive[]]
+export interface FieldsDesc<T = string | RawSql> {
+	[key: string]: T | FieldsDesc<T>
+}
+export type FieldDesc<T = string | RawSql> = T | FieldsDesc<T>
+
+//#endregion
