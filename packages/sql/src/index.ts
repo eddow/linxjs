@@ -47,8 +47,8 @@ interface SqlOptions {
 	fields: FieldDesc
 	nameCounters: Record<string, number>
 }
-
-export class SqlCollection<T> extends LinqCollection<T> {
+// TODO define constants
+export class SqlCollection<T extends BaseLinqEntry> extends LinqCollection<T> {
 	private readonly options: Promise<SqlOptions>
 	constructor(
 		private readonly db: knex.Knex,
@@ -63,29 +63,29 @@ export class SqlCollection<T> extends LinqCollection<T> {
 			let calcField = 1
 			const { qb, fields } = await options,
 				allFields: string[] = [],
-				args: any[] = [],
-				recurFields = async (field: FieldDesc) => {
-					if (field instanceof Array) {
-						const [fName, fArgs] = field
-						if (fArgs?.length) args.push(...fArgs)
-						else {
-							const rex = /^[a-zA-Z_][\w$]*(?:\.[a-zA-Z_][\w$]*)*$/
-							if (rex.test(fName)) {
-								allFields.push(`${fName} AS \`${fName}\``)
-								return fName
-							}
+				args: any[] = []
+			async function recurFields(field: FieldDesc) {
+				if (field instanceof Array) {
+					const [fName, fArgs] = field
+					if (fArgs?.length) args.push(...fArgs)
+					else {
+						const rex = /^[a-zA-Z_][\w$]*(?:\.[a-zA-Z_][\w$]*)*$/
+						if (rex.test(fName)) {
+							allFields.push(`${fName} AS \`${fName}\``)
+							return fName
 						}
-						const calcName = `${linxCalcField}${calcField++}`
-						allFields.push(`${fName} AS ${calcName}`)
-						return calcName
 					}
-					const rv: Record<string, any> = {}
-					for (const f in <FieldsDesc>field) rv[f] = await recurFields(f)
-					return rv
+					const calcName = `${linxCalcField}${calcField++}`
+					allFields.push(`${fName} AS ${calcName}`)
+					return calcName
 				}
+				const rv: Record<string, any> = {},
+					fields = <FieldsDesc>field
+				for (const f in fields) rv[f] = await recurFields(fields[f])
+				return rv
+			}
 			const struct = await recurFields(fields)
 			const query = qb.clone().select(db.raw(allFields.join(', ')))
-			console.info(query.toQuery())
 			for (const r of await query) yield buildObject<T>(struct, r)
 		})()
 	}

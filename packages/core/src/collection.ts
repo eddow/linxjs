@@ -106,7 +106,7 @@ export abstract class LinqCollection<T extends BaseLinqEntry = BaseLinqEntry>
 	 * @param elementSelector A function to select the elements from the current sequence (default is the identity function).
 	 * @returns A new sequence that contains the results of the group operation.
 	 */
-	abstract groupBy<R extends BaseLinqEntry>(
+	abstract groupBy<R extends BaseLinqQSEntry>(
 		keySelector: Comparable<T>,
 		elementSelector?: Transmissible<R, [T]>
 	): LinqCollection<Group<R>>
@@ -283,7 +283,7 @@ export class OrderedLinqCollection<T extends BaseLinqEntry> extends LinqCollecti
 			innerVariable
 		)
 	}
-	groupBy<R extends BaseLinqEntry>(
+	groupBy<R extends BaseLinqQSEntry>(
 		keySelector: Comparable<T>,
 		elementSelector?: Transmissible<R, [T]>
 	): LinqCollection<Group<R>> {

@@ -1,6 +1,9 @@
 import type { LinqCollection } from './collection'
 import type { TemplateStringsReader } from './parser'
 
+/**
+ * Thrown then the linq query is not valid.
+ */
 export class LinqParseError extends Error {
 	constructor(reader: TemplateStringsReader, message: string) {
 		const part = reader.parts[reader.part],
@@ -12,6 +15,9 @@ export class LinqParseError extends Error {
 	}
 }
 
+/**
+ * Describe a partial linq fragment (ex. `a ${x} b ${y} c ${z} d`)
+ */
 export class InlineValue {
 	constructor(
 		public args: any[] = [],
@@ -22,6 +28,9 @@ export class InlineValue {
 export type BaseLinqEntry = any
 export type BaseLinqQSEntry = object
 
+/**
+ * Thrown when a linq query does not fit the given data
+ */
 export class SemanticError extends Error {
 	constructor(message: string, parent?: Error) {
 		super(message)
@@ -29,10 +38,29 @@ export class SemanticError extends Error {
 	}
 }
 
+/**
+ * Thrown when a "linq assertion" (ex `single`, `first`) is not verified
+ */
+export class LinqAssertionFailure extends Error {
+	constructor(message: string, parent?: Error) {
+		super(message)
+		this.name = 'LinqAssertionFailure'
+	}
+}
+
+/**
+ * Grouped collection: retrieved by `GroupBy` or the `group ... by` QS
+ */
 export interface Group<T extends BaseLinqEntry> extends LinqCollection<T> {
 	key: Primitive
 }
 
+/**
+ *
+ * @param key Primitive
+ * @param value
+ * @returns
+ */
 export function keyedGroup<T extends BaseLinqEntry>(
 	key: Primitive,
 	value: LinqCollection<T>
@@ -107,7 +135,7 @@ export class TransmissibleFunction<R, T extends BaseLinqEntry[] = [BaseLinqEntry
 	/** The parameters from the QS entry */
 	readonly params: string[]
 	/** The given argument values */
-	readonly args?: any[]
+	readonly args?: Transmissible<any>[]
 	readonly body: string
 	/** If the value is js-given and constant */
 	readonly constant?: R

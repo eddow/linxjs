@@ -159,7 +159,8 @@ export class TemplateStringsReader {
 				nextRead = commaLess
 			if (!nextRead) {
 				parsable.strings.push(next.trimStart())
-				if (this.part < this.args.length) parsable.args.push(this.args[this.part])
+				if (this.part < this.args.length)
+					parsable.args.push(new TransmissibleFunction(this.args[this.part], variables))
 				this.part++
 				this.posInPart = 0
 				next = this.parts[this.part]

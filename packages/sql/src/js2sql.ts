@@ -3,18 +3,22 @@ import {
 	Primitive,
 	transmissibleFunction,
 	TransmissibleFunction,
-	BaseLinqEntry
+	BaseLinqEntry,
+	SemanticError,
+	linxArgName
 } from '@linxjs/core'
 import * as esprima from 'esprima'
 import type {
 	BinaryExpression,
 	ExpressionStatement,
 	Program,
+	Property,
 	UnaryExpression,
 	BaseNode,
 	Identifier,
 	MemberExpression,
-	Literal
+	Literal,
+	ObjectExpression
 } from 'estree'
 import { FieldDesc, FieldsDesc, RawSql } from './dbUtils'
 
@@ -56,14 +60,18 @@ class AstBrowser<R> {
 		public readonly tf: TransmissibleFunction<R>,
 		public readonly complex: boolean
 	) {}
-	getField(node: BaseNode): FieldDesc {
-		const ast = <T extends BaseNode>(): T => <T>node
+	getField(node: Identifier | MemberExpression): FieldDesc {
 		switch (node.type) {
 			case 'Identifier':
-				return (<FieldsDesc>this.fields)[ast<Identifier>().name]
+				return (<FieldsDesc>this.fields)[(<Identifier>node).name]
 			case 'MemberExpression':
-				const memberExpression = ast<MemberExpression>(),
-					fields = this.getField(memberExpression.object)
+				const memberExpression = <MemberExpression>node
+				if (
+					memberExpression.object.type !== 'Identifier' &&
+					memberExpression.object.type !== 'MemberExpression'
+				)
+					throw new Js2sqlError('Computed properties not allowed')
+				const fields = this.getField(memberExpression.object)
 				if (typeof fields !== 'object' || fields instanceof Array)
 					throw new Js2sqlError('Field has no components')
 				if (memberExpression.property.type === 'Identifier') {
@@ -78,11 +86,10 @@ class AstBrowser<R> {
 				}
 				throw new Js2sqlError(`Unsupported node type ${node.type} for field retrieval`)
 			default:
-				throw new Js2sqlError(`Unsupported node type ${node.type} for field retrieval`)
+				throw new Js2sqlError(`Unsupported node type ${(<BaseNode>node).type} for field retrieval`)
 		}
 	}
 	parseValue(node: BaseNode): RawSql {
-		const ast = <T extends BaseNode>(): T => <T>node
 		switch (node.type) {
 			case 'ArrayExpression':
 				throw new Error('AST not implemented: ArrayExpression')
@@ -97,7 +104,7 @@ class AstBrowser<R> {
 			case 'AwaitExpression':
 				throw new Error('AST not implemented: AwaitExpression')
 			case 'BinaryExpression':
-				const binaryExpression = ast<BinaryExpression>(),
+				const binaryExpression = <BinaryExpression>node,
 					newOp = operatorMap[binaryExpression.operator]
 				if (!newOp) throw new Js2sqlError(`Unsupported operator ${binaryExpression.operator}`)
 				const left = this.parseValue(binaryExpression.left),
@@ -135,8 +142,6 @@ class AstBrowser<R> {
 				throw new Error('AST not implemented: ExportNamedDeclaration')
 			case 'ExportSpecifier':
 				throw new Error('AST not implemented: ExportSpecifier')
-			case 'ExpressionStatement':
-				return this.parseValue(ast<ExpressionStatement>().expression)
 			case 'ForInStatement':
 				throw new Error('AST not implemented: ForInStatement')
 			case 'ForOfStatement':
@@ -164,9 +169,8 @@ class AstBrowser<R> {
 			case 'LabeledStatement':
 				throw new Error('AST not implemented: LabeledStatement')
 			case 'Literal':
-				const literal = ast<Literal>()
+				const literal = <Literal>node
 				let rawSql = literal.value
-				// TODO use `?` in select/complex too
 				return this.complex
 					? [
 							typeof rawSql === 'string'
@@ -177,9 +181,26 @@ class AstBrowser<R> {
 					: ['?', [literal.value]]
 			case 'LogicalExpression':
 				throw new Error('AST not implemented: LogicalExpression')
-			case 'Identifier':
 			case 'MemberExpression':
-				let field = this.getField(ast<MemberExpression>())
+				const memberExpression = <MemberExpression>node
+				if (
+					memberExpression.object.type === 'Identifier' &&
+					memberExpression.object.name === linxArgName
+				) {
+					if (memberExpression.property.type !== 'Literal')
+						throw new Js2sqlError(
+							`Unsupported index ${memberExpression.property.type} for argument retrieval`
+						)
+					if (typeof memberExpression.property.value !== 'number')
+						throw new Js2sqlError(
+							`Unsupported index ${typeof memberExpression.property.value} for argument retrieval`
+						)
+					return <RawSql>(
+						js2sql(this.tf.args[memberExpression.property.value], this.fields, this.complex)
+					)
+				}
+			case 'Identifier':
+				let field = this.getField(<Identifier | MemberExpression>node)
 				if (typeof field === 'string') field = [field, []]
 				if (!(field instanceof Array))
 					throw new Js2sqlError(`Cannot retrieve field from ${JSON.stringify(field)}`)
@@ -190,16 +211,10 @@ class AstBrowser<R> {
 				throw new Error('AST not implemented: MethodDefinition')
 			case 'NewExpression':
 				throw new Error('AST not implemented: NewExpression')
-			case 'ObjectExpression':
-				throw new Error('AST not implemented: ObjectExpression')
 			case 'ObjectPattern':
 				throw new Error('AST not implemented: ObjectPattern')
 			case 'PrivateIdentifier':
 				throw new Error('AST not implemented: PrivateIdentifier')
-			case 'Program':
-				if (ast<Program>().body.length !== 1)
-					throw new Js2sqlError('Expected only one statement in the lambda body')
-				return this.parseValue(ast<Program>().body[0])
 			case 'Property':
 				throw new Error('AST not implemented: Property')
 			case 'ReturnStatement':
@@ -229,7 +244,7 @@ class AstBrowser<R> {
 			case 'TryStatement':
 				throw new Error('AST not implemented: TryStatement')
 			case 'UnaryExpression':
-				const unaryExpression = ast<UnaryExpression>(),
+				const unaryExpression = <UnaryExpression>node,
 					newFix = (unaryExpression.prefix ? prefixMap : postfixMap)[unaryExpression.operator]
 				if (!newFix)
 					throw new Error(
@@ -253,9 +268,36 @@ class AstBrowser<R> {
 	}
 
 	parse(node: BaseNode): FieldDesc {
-		if (!this.complex) return this.parseValue(node)
-		//TODO parse complex {...}
-		return this.parseValue(node)
+		switch (node.type) {
+			case 'Program':
+				const program = <Program>node
+				if (program.body.length !== 1)
+					throw new Js2sqlError('Expected only one statement in the lambda body')
+				return this.parse(program.body[0])
+			case 'ObjectExpression':
+				if (!this.complex) throw new SemanticError('No object expressions in primitive values')
+				const objectExpression = <ObjectExpression>node,
+					rv: FieldsDesc = {}
+				for (const property of objectExpression.properties) {
+					// TODO spread elements?
+					if (property.type === 'SpreadElement')
+						throw new Js2sqlError('Spread elements not allowed')
+					if (property.type !== 'Property')
+						throw new Js2sqlError(`Unknown property type: ${(<BaseNode>property).type}`)
+					if (property.computed)
+						throw new Js2sqlError('Computed properties not allowed (eg. `{[key]: value}`')
+					if (property.kind !== 'init') throw new Js2sqlError(`Getter and setter are not allowed`)
+					if (property.method) throw new Js2sqlError('Method properties not allowed')
+					const { key, value } = <Property>property
+					if (key.type !== 'Identifier') throw new Js2sqlError(`Unsupported key type: ${key.type}`)
+					rv[key.name] = this.parse(value)
+				}
+				return rv
+			case 'ExpressionStatement':
+				return this.parse((<ExpressionStatement>node).expression)
+			default:
+				return this.parseValue(node)
+		}
 	}
 }
 

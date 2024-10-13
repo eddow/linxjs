@@ -16,8 +16,7 @@ export abstract class Transformation<
 	T extends BaseLinqEntry = BaseLinqEntry,
 	R extends BaseLinqEntry = BaseLinqEntry
 > {
-	newVariables(already?: string[]): string[] {
-		if (!already) throw new SemanticError(`${this.constructor.name} needs given already variables`)
+	newVariables(already: string[]): string[] {
 		return <string[]>already
 	}
 	abstract transform(enumerable: LinqCollection<T>): LinqCollection<R>
@@ -34,7 +33,7 @@ export class FromTransformation<
 	) {
 		super()
 	}
-	newVariables(already?: string[]) {
+	newVariables(already: string[]) {
 		return already ? [...already, this.from] : [this.from]
 	}
 	transform(enumerable: LinqCollection<T>): LinqCollection<R> {
@@ -112,8 +111,7 @@ export class JoinTransformation<
 	) {
 		super()
 	}
-	newVariables(already?: string[]) {
-		if (!already) throw new SemanticError(`${this.constructor.name} needs given already variables`)
+	newVariables(already: string[]) {
 		return [...already, this.into || this.from]
 	}
 	transform(enumerable: LinqCollection<T>) {

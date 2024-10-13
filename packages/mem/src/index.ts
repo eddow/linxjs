@@ -17,7 +17,8 @@ import {
 	unwrap,
 	toArray,
 	functional,
-	promised
+	promised,
+	LinqAssertionFailure
 } from '@linxjs/core'
 import { comparablePair, concatResultSelector, MemCollectionEntry } from './helpers'
 
@@ -226,7 +227,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 
 	async first(predicate?: (item: T) => boolean): Promise<T> {
 		for await (const v of this.enumerable) if (!predicate || predicate(v)) return v
-		throw new SemanticError('Empty collection')
+		throw new LinqAssertionFailure('Empty collection')
 	}
 	async firstOrDefault(predicate?: (item: T) => boolean, defaultValue: T = null): Promise<T> {
 		for await (const v of this.enumerable) if (!predicate || predicate(v)) return v
@@ -236,7 +237,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		const functions = { predicate: functional(predicate) }
 		let rv: T
 		for await (const v of this.enumerable) if (!predicate || (await functions.predicate(v))) rv = v
-		if (rv === undefined) throw new SemanticError('Empty collection')
+		if (rv === undefined) throw new LinqAssertionFailure('Empty collection')
 		return rv
 	}
 	async lastOrDefault(predicate?: (item: T) => boolean, defaultValue: T = null): Promise<T> {
@@ -249,11 +250,11 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 			rv: T
 		for await (const v of this.enumerable) {
 			if (predicate && !predicate(v)) continue
-			if (found) throw new SemanticError('Collection contains multiple elements')
+			if (found) throw new LinqAssertionFailure('Collection contains multiple elements')
 			found = true
 			rv = v
 		}
-		if (!found) throw new SemanticError('Empty collection')
+		if (!found) throw new LinqAssertionFailure('Empty collection')
 		return rv
 	}
 	async singleOrDefault(predicate?: (item: T) => boolean, defaultValue: T = null): Promise<T> {
@@ -261,7 +262,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 			rv: T
 		for await (const v of this.enumerable) {
 			if (predicate && !predicate(v)) continue
-			if (found) throw new SemanticError('Collection contains multiple elements')
+			if (found) throw new LinqAssertionFailure('Collection contains multiple elements')
 			found = true
 			rv = v
 		}
@@ -490,7 +491,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		)
 	}
 
-	groupBy<R extends BaseLinqEntry>(
+	groupBy<R extends MemCollectionEntry>(
 		keySelector: Comparable<T>,
 		elementSelector?: Transmissible<R, [T]>
 	): MemCollection<Group<R>> {

@@ -19,13 +19,13 @@ export default function (tables: { numbers?: LinqCollection<number> }) {
 	})
 	test('compose value', async () => {
 		expect(
-			await from`n in ${tables.numbers!} where n % 2 === 0 select { n, inc: ${(n: number) => n + 1} }`.toArray()
+			await from`n in ${tables.numbers!} where n % 2 === 0 select { n, inc: ${(n: number) => n + 1}, d: 3 }`.toArray()
 		).toEqual([
-			{ n: 2, inc: 3 },
-			{ n: 4, inc: 5 },
-			{ n: 6, inc: 7 },
-			{ n: 8, inc: 9 },
-			{ n: 10, inc: 11 }
+			{ n: 2, inc: 3, d: 3 },
+			{ n: 4, inc: 5, d: 3 },
+			{ n: 6, inc: 7, d: 3 },
+			{ n: 8, inc: 9, d: 3 },
+			{ n: 10, inc: 11, d: 3 }
 		])
 	})
 	test('order by', async () => {

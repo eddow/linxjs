@@ -5,7 +5,7 @@ LINQ Query Syntax for javascript.
 ## What ?
 
 ```js
-linq`from s in ${students} order by s.age descending, s.name select s.name`
+from`s in ${students} order by s.age descending, s.name select s.name`
 ```
 
 This was correct JS syntax and now has a meaningful value.
@@ -14,9 +14,7 @@ This was correct JS syntax and now has a meaningful value.
 
 First, everything is in a "string" definition, so it's not compiled but interpreted at run-time. Pure code can appear in `${...}` and the in-string code is JS code - so we don't enjoy such strong typing (yet?)
 
-### Why ?
-
-For now, the "in-mem" executor is implemented (the one using `Array.filter` and `Array.sort`) though the purpose at long term is to have it connected to some ORM/GraphQL/... as possible.
+Function names are re-cased - ie., `camelCase` is used instead of `PascalCase`
 
 ## How ?
 
@@ -35,10 +33,60 @@ The linq parser is therefore a parser going through these two lists at the same 
 
 ### JS parsing
 
-No, the library does not parse JS. It stops at linq keywords to delimitate what might be JS code and use `new Function` giving it code directly.
+No, the library does not necessarily parse JS. It certainly parses linq keywords to delimitate what might be JS code and use `new Function` giving it code directly.
+
+The functions might be either executed (ex. `MemCollection`) or parsed (ex. `SqlCollection`) depending on how to use it
 
 ### Stages
 
-- Parsing: Take the string fragments and arguments and create a list of `Transformations` along a selection
-- This information can be interpreted. As stated before, here, only the in-memory interpretation is implemented.
-- Profit
+- 1: Collect of panties (Take the string fragments and arguments and create a list of `Transformations` along a selection) - Occurs on `from``...`` ` call
+- 2: ? (it depends on the `LinqCollection` implementation used) - Occurs on iterating the result (SQL query, in-memory sorting/filtering/&c., ...)
+- 3: Profit
+
+### Implemented functionalities
+
+The implementations (in-memory/sql) are done in the collection.
+
+```ts
+function firstOf(LinqCollection<T> c) {
+	return from`x in ${c} where x... select x...`.first()
+}
+```
+
+The behavior of calling `firstOf` (filter/sql call/...) will be determined by the class of `c`
+
+## Usage
+
+### Collection creation
+
+```ts
+interface Student {
+	name: string
+	age: number
+}
+```
+
+#### In-memory
+
+`@linxjs/mem` provides `memCollection<T>(data: Iterable<T> | AsyncIterable<T>)` that allows to provide data directly
+
+```ts
+import memCollection from '@linxjs/mem'
+
+const students = memCollection<Student>([
+	{ name: 'John', age: 21 },
+	{ name: 'Melissa', age: 20 }
+])
+```
+
+#### Sql
+
+`@linx/sql` uses `knex` to specify a database.
+
+```ts
+import knex from 'knex'
+import sqlCollection from '@linxjs/sql'
+
+const db = knex(dbConfig)
+const students = sqlCollection<Student>(db, 'students')
+```
