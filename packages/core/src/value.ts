@@ -219,9 +219,29 @@ export interface OrderSpec<T extends BaseLinqEntry = BaseLinqEntry> {
 //#endregion
 //#region general helpers for implementations
 
-export async function toArray<T = any>(enumerable: AsyncIterable<T>): Promise<T[]> {
-	const rv: T[] = []
-	for await (const v of enumerable) rv.push(v)
+async function resolveRecursive<T, R = any>(obj: T): Promise<R> {
+	if (obj instanceof Promise) return resolveRecursive(await obj)
+	if (obj && typeof obj === 'object') {
+		if (obj.constructor === {}.constructor) {
+			const rv: Record<string, any> = {}
+			for (const [k, v] of Object.entries(obj)) rv[k] = await resolveRecursive(v)
+			return <R>rv
+		}
+		if (obj[Symbol.iterator])
+			return <R>(
+				await Promise.all([...(<Iterable<T>>(<unknown>obj))].map((v) => resolveRecursive(v)))
+			)
+
+		if (obj[Symbol.asyncIterator]) return <R>await toArray(<AsyncIterable<T>>(<unknown>obj))
+	}
+	return <R>(<unknown>obj)
+}
+
+export async function toArray<T, R = any>(enumerable: AsyncIterable<T>): Promise<R[]> {
+	const rv: R[] = []
+	for await (const v of enumerable) {
+		rv.push(await resolveRecursive(v))
+	}
 	return rv
 }
 

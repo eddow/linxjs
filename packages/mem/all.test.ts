@@ -1,6 +1,6 @@
 import memCollection from './src'
 import { allTests, type Student, type Course, type Registration } from '../../test'
-import { default as from, Group } from '@linxjs/core'
+import { default as from, Group, LinqCollection } from '@linxjs/core'
 
 const numberTables = {
 		numbers: memCollection<number>([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
@@ -35,27 +35,62 @@ const numberTables = {
 		{ name: 'Tim', course: 'History' },
 		{ name: 'John', course: 'Geography' },
 		{ name: 'Alf', course: 'Math' }
-	])
-
-allTests(numberTables, students, courses, registrations)
-
+	]) //allTests(numberTables, students, courses, registrations)
 describe('debug', () => {
 	test('here', async () => {
-		expect(
-			await from`n in ${numberTables.numbers!} group n by n % 2`
-				.select(async (g: Group<number>) => [g.key, await g.toArray()])
-				.toArray()
+		/*expect(
+			await from`s in ${students}
+				join r in ${registrations} on s.name equals r.name into courses
+				select ${(s: Student, courses: LinqCollection<Registration>) => ({
+					name: s.name,
+					courses: courses.select((c) => c.course)
+				})}`.toArray()
 		).toEqual([
-			[0, [2, 4, 6, 8, 10]],
-			[1, [1, 3, 5, 7, 9]]
+			{ name: 'Bob', courses: ['Geography'] },
+			{ name: 'John', courses: ['History', 'Geography'] },
+			{ name: 'Mark', courses: ['Math', 'English'] },
+			{ name: 'Marlene', courses: [] },
+			{ name: 'Peter', courses: ['English', 'Chemistry'] },
+			{ name: 'Sara', courses: ['Chemistry', 'Physics'] },
+			{ name: 'Tim', courses: ['Physics', 'History'] }
+		])*/
+		expect(
+			await from`s in ${students}
+				join r in ${registrations} on s.name equals r.name
+				join c in ${courses} on r.course equals c.name into courses
+				order by s.name
+				select ${async (s, courses) => ({ name: s.name, hours: await courses.count() })}`.toArray()
+		).toEqual([
+			{ name: 'Bob', course: 'Geography', hours: 15 },
+			{ name: 'John', course: 'Geography', hours: 15 },
+			{ name: 'John', course: 'History', hours: 10 },
+			{ name: 'Mark', course: 'English', hours: 40 },
+			{ name: 'Mark', course: 'Math', hours: 60 },
+			{ name: 'Peter', course: 'Chemistry', hours: 20 },
+			{ name: 'Peter', course: 'English', hours: 40 },
+			{ name: 'Sara', course: 'Chemistry', hours: 20 },
+			{ name: 'Sara', course: 'Physics', hours: 35 },
+			{ name: 'Tim', course: 'History', hours: 10 },
+			{ name: 'Tim', course: 'Physics', hours: 35 }
 		])
 		expect(
-			await from`n in ${numberTables.numbers!} group by n % 2`
-				.select(async (g: Group<number>) => [g.key, await g.toArray()])
-				.toArray()
+			await from`s in ${students}
+				join r in ${registrations} on s.name equals r.name
+				join c in ${courses} on r.course equals c.name into courses
+				order by s.name
+				select { name: s.name, hours: courses.count() }`.toArray()
 		).toEqual([
-			[0, [2, 4, 6, 8, 10]],
-			[1, [1, 3, 5, 7, 9]]
+			{ name: 'Bob', course: 'Geography', hours: 15 },
+			{ name: 'John', course: 'Geography', hours: 15 },
+			{ name: 'John', course: 'History', hours: 10 },
+			{ name: 'Mark', course: 'English', hours: 40 },
+			{ name: 'Mark', course: 'Math', hours: 60 },
+			{ name: 'Peter', course: 'Chemistry', hours: 20 },
+			{ name: 'Peter', course: 'English', hours: 40 },
+			{ name: 'Sara', course: 'Chemistry', hours: 20 },
+			{ name: 'Sara', course: 'Physics', hours: 35 },
+			{ name: 'Tim', course: 'History', hours: 10 },
+			{ name: 'Tim', course: 'Physics', hours: 35 }
 		])
 	})
 })

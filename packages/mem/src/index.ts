@@ -475,7 +475,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 		inner: AsyncIterable<I>,
 		outerKeySelector: Comparable<T>,
 		innerKeySelector: Comparable<I>,
-		resultSelector: Transmissible<R, [T, I[]]> | string,
+		resultSelector: Transmissible<R, [T, LinqCollection<I>]> | string,
 		innerVariable?: string
 	): MemCollection<R> {
 		const selector = concatResultSelector(resultSelector)
@@ -485,7 +485,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 			outerKeySelector,
 			innerKeySelector,
 			async function* (outer: T, inner: I[]) {
-				yield await Promise.resolve(selector(outer, inner))
+				yield await Promise.resolve(selector(outer, memCollection<I>(inner)))
 			},
 			innerVariable
 		)
@@ -517,7 +517,7 @@ export class MemCollection<T extends BaseLinqEntry = BaseLinqEntry> extends Linq
 						iteratorResult = await iterator.next()
 						if (!iteratorResult.done) key = await functions.keySelector(iteratorResult.value)
 					} while (!iteratorResult.done && key === groupKey)
-					yield keyedGroup<R>(groupKey, new MemCollection<R>(group))
+					yield keyedGroup<R>(groupKey, memCollection<R>(group))
 				}
 			}
 		})

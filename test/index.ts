@@ -16,3 +16,8 @@ export function allTests(
 		studentsTest(students, courses, registrations)
 	})
 }
+
+/* TODO
+- x in [A, B]
+- dates
+*/

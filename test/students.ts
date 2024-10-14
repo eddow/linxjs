@@ -84,6 +84,28 @@ export default function (students: any, courses: any, registrations: any) {
 		])
 	})
 
+	test('sum', async () => {
+		expect(
+			await from`s in ${students}
+				join r in ${registrations} on s.name equals r.name
+				join c in ${courses} on r.course equals c.name into courses
+				order by s.name
+				select { name: s.name, hours: courses.count() }`.toArray()
+		).toEqual([
+			{ name: 'Bob', course: 'Geography', hours: 15 },
+			{ name: 'John', course: 'Geography', hours: 15 },
+			{ name: 'John', course: 'History', hours: 10 },
+			{ name: 'Mark', course: 'English', hours: 40 },
+			{ name: 'Mark', course: 'Math', hours: 60 },
+			{ name: 'Peter', course: 'Chemistry', hours: 20 },
+			{ name: 'Peter', course: 'English', hours: 40 },
+			{ name: 'Sara', course: 'Chemistry', hours: 20 },
+			{ name: 'Sara', course: 'Physics', hours: 35 },
+			{ name: 'Tim', course: 'History', hours: 10 },
+			{ name: 'Tim', course: 'Physics', hours: 35 }
+		])
+	})
+
 	test('join into', async () => {
 		expect(
 			await from`s in ${students}

@@ -34,18 +34,19 @@ describe('sql', () => {
 		expect(await getTableColumns(db, 'numbers')).toEqual(['n'])
 	})
 	test('debug', async () => {
-		expect(
-			await from`n in ${numberTables.numbers!} where n % 2 === 0 select { n, inc: ${(n: number) => n + 1}, d: 3 }`.toArray()
-		).toEqual([
-			{ n: 2, inc: 3, d: 3 },
-			{ n: 4, inc: 5, d: 3 },
-			{ n: 6, inc: 7, d: 3 },
-			{ n: 8, inc: 9, d: 3 },
-			{ n: 10, inc: 11, d: 3 }
+		const tables = numberTables
+		expect(await from`n in ${tables.numbers!} order by n`.toArray()).toEqual([
+			1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+		])
+		expect(await from`n in ${tables.numbers!} order by -n ascending`.toArray()).toEqual([
+			10, 9, 8, 7, 6, 5, 4, 3, 2, 1
+		])
+		expect(await from`n in ${tables.numbers!} order by n descending`.toArray()).toEqual([
+			10, 9, 8, 7, 6, 5, 4, 3, 2, 1
 		])
 	})
 })
 
 describe('numbers', () => {
-	//testNumbers(numberTables)
+	testNumbers(numberTables)
 })

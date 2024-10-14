@@ -263,7 +263,7 @@ export class SqlCollection<T extends BaseLinqEntry> extends LinqCollection<T> {
 		inner: Transmissible<List<I>, [T]>,
 		outerKeySelector: Comparable<T>,
 		innerKeySelector: Comparable<I>,
-		resultSelector: Transmissible<R, [T, I[]]> | string,
+		resultSelector: Transmissible<R, [T, LinqCollection<I>]> | string,
 		innerVariable?: string
 	): SqlCollection<R> {
 		throw new Error('Not implemented: groupJoin')
@@ -305,7 +305,25 @@ export class SqlCollection<T extends BaseLinqEntry> extends LinqCollection<T> {
 	}*/
 
 	order(...orders: OrderSpec<T>[]): SqlCollection<T> {
-		throw new Error('Not implemented: order')
+		return new SqlCollection<T>(
+			this.db,
+			this.options.then(({ qb, fields, nameCounters }) => {
+				qb = qb.clone()
+				const allArgs: any[] = [],
+					sqlOrders = orders.map((order) => {
+						const to = js2sqlPrimitive(order.by, fields)
+						allArgs.push(...to[1])
+						return `${to[0]} ${order.way.toUpperCase()}`
+					})
+
+				qb = qb.orderByRaw(sqlOrders.join(','), allArgs)
+				return {
+					qb: qb.clone(),
+					fields,
+					nameCounters
+				}
+			})
+		)
 	}
 
 	let<O extends BaseLinqEntry, R extends BaseLinqQSEntry>(
